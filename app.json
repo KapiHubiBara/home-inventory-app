@@ -1,0 +1,14 @@
+{
+  "expo": {
+    "name": "home-inventory-app",
+    "slug": "home-inventory-app",
+    "version": "1.0.0",
+    "sdkVersion": "54.0.0",
+    "platforms": ["ios", "android"],
+    "extra": {
+      "eas": {
+        "projectId": "twoj-id-projektu" 
+      }
+    }
+  }
+}
