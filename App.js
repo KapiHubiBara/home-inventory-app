@@ -133,13 +133,14 @@ const PREDEFINED_COLORS = [
 
 export default function App() {
   const [authToken, setAuthToken] = useState(null);
-  const [forceUpdate, setForceUpdate] = useState(0);
-  const [authChecking, setAuthChecking] = useState(true);
+  const [authChecking, setAuthChecking] = useState(false);
   const [authMode, setAuthMode] = useState('login');
   const [authUsername, setAuthUsername] = useState('');
   const [authPassword, setAuthPassword] = useState('');
-  const [showAuthPassword, setShowAuthPassword] = useState(false); // Podgląd hasła na ekranie logowania
+  const [showAuthPassword, setShowAuthPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
+  const [forceUpdate, setForceUpdate] = useState(0);
 
   const [themeMode, setThemeMode] = useState('light');
   const t = THEMES[themeMode];
@@ -224,29 +225,6 @@ export default function App() {
   const dynamicCellSize = Math.floor((SCREEN_WIDTH - 32 - (GRID_CONTAINER_PADDING * 2)) / gridCols);
   const dynamicSubCellSize = Math.floor((SCREEN_WIDTH - 32 - (GRID_CONTAINER_PADDING * 2)) / subGridCols);
 
-  // Sprawdzanie zapisanej sesji oraz danych logowania przy starcie
-  useEffect(() => {
-    const loadSessionAndCredentials = async () => {
-      try {
-        const savedToken = await AsyncStorage.getItem('user_jwt_token');
-        const savedUser = await AsyncStorage.getItem('@saved_username');
-        const savedPass = await AsyncStorage.getItem('@saved_password');
-
-        if (savedUser) setAuthUsername(savedUser);
-        if (savedPass) setAuthPassword(savedPass);
-
-        if (savedToken) {
-          setAuthToken(savedToken);
-        }
-      } catch (e) {
-        console.log('Błąd wczytywania danych sesji', e);
-      } finally {
-        setAuthChecking(false);
-      }
-    };
-    loadSessionAndCredentials();
-  }, []);
-
   // Pobieranie danych po zalogowaniu
   useEffect(() => {
     if (authToken) {
@@ -269,38 +247,54 @@ export default function App() {
       });
       const token = response.data.token;
       
-      // Zapis tokena oraz danych do szybkiego logowania
-      await AsyncStorage.setItem('user_jwt_token', token);
-      await AsyncStorage.setItem('@saved_username', authUsername.trim());
-      await AsyncStorage.setItem('@saved_password', authPassword);
-
       setAuthToken(token);
+
+      if (rememberMe) {
+        await AsyncStorage.setItem('user_jwt_token', token);
+        await AsyncStorage.setItem('@saved_username', authUsername.trim());
+        await AsyncStorage.setItem('@saved_password', authPassword);
+      } else {
+        await AsyncStorage.removeItem('user_jwt_token');
+        await AsyncStorage.removeItem('@saved_username');
+        await AsyncStorage.removeItem('@saved_password');
+      }
+
+      setAuthPassword('');
     } catch (error) {
-      Alert.alert('Błąd autoryzacji', error.response?.data?.detail || 'Wystąpił błąd połączenia.');
+      const errorDetail = error.response?.data?.detail || '';
+      
+      if (authMode === 'login') {
+        if (typeof errorDetail === 'string' && errorDetail.toLowerCase().includes('user')) {
+          Alert.alert('Błąd logowania', 'Nie znaleziono użytkownika.');
+        } else if (typeof errorDetail === 'string' && (errorDetail.toLowerCase().includes('password') || errorDetail.toLowerCase().includes('credential') || errorDetail.toLowerCase().includes('incorrect'))) {
+          Alert.alert('Błąd logowania', 'Błędne hasło.');
+        } else {
+          Alert.alert('Błąd logowania', errorDetail || 'Nie znaleziono użytkownika lub podano błędne hasło.');
+        }
+      } else {
+        Alert.alert('Błąd rejestracji', errorDetail || 'Wystąpił błąd podczas tworzenia konta.');
+      }
     } finally {
       setAuthLoading(false);
     }
   };
 
-const handleLogout = async () => {
+  const handleLogout = async () => {
     Alert.alert('Wylogowanie', 'Czy na pewno chcesz się wylogować?', [
       { text: 'Anuluj', style: 'cancel' },
       { 
-        text: 'Kategoryczne Wylogowanie', 
+        text: 'Wyloguj', 
         style: 'destructive', 
         onPress: async () => {
           try {
-            // Czyszczenie wszelkich możliwych kluczy sesji i danych w AsyncStorage
-            await AsyncStorage.removeItem('user_jwt_token');
-            await AsyncStorage.removeItem('@saved_username');
-            await AsyncStorage.removeItem('@saved_password');
-            await AsyncStorage.clear(); // Czyści całą pamięć lokalną aplikacji na wszelki wypadek
+            await AsyncStorage.clear();
           } catch (e) {
             console.log('Błąd czyszczenia pamięci', e);
           }
           setAuthToken(null);
           setAuthUsername('');
           setAuthPassword('');
+          setRememberMe(false);
           setItems([]);
           setActiveTab('inventory');
           setForceUpdate(prev => prev + 1);
@@ -308,6 +302,7 @@ const handleLogout = async () => {
       }
     ]);
   };
+
   const getAuthHeaders = () => ({
     headers: { Authorization: `Bearer ${authToken}` }
   });
@@ -1196,7 +1191,7 @@ const handleLogout = async () => {
     );
   }
 
-  // Ekran logowania / rejestracji z podglądem hasła
+  // Ekran logowania / rejestracji bez automatycznego logowania w tle + przełącznik zapamiętywania
   if (!authToken) {
     return (
       <SafeAreaProvider>
@@ -1218,7 +1213,7 @@ const handleLogout = async () => {
           />
 
           <Text style={{ color: '#94a3b8', fontSize: 13, fontWeight: '700', marginBottom: 6 }}>Hasło</Text>
-          <View style={{ position: 'relative', justifyContent: 'center', marginBottom: 24 }}>
+          <View style={{ position: 'relative', justifyContent: 'center', marginBottom: 16 }}>
             <TextInput 
               style={{ backgroundColor: '#1e293b', color: '#f8fafc', padding: 14, paddingRight: 50, borderRadius: 10, fontSize: 15, borderWidth: 1, borderColor: '#334155' }}
               placeholder="minimum 4 znaki"
@@ -1233,6 +1228,15 @@ const handleLogout = async () => {
             >
               <Text style={{ fontSize: 18 }}>{showAuthPassword ? '👁️‍🗨️' : '👁️'}</Text>
             </TouchableOpacity>
+          </View>
+
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, backgroundColor: '#1e293b', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#334155' }}>
+            <Text style={{ color: '#f8fafc', fontSize: 14, fontWeight: '600' }}>Zapamiętaj mnie</Text>
+            <Switch 
+              value={rememberMe} 
+              onValueChange={setRememberMe} 
+              trackColor={{ false: '#334155', true: '#2563eb' }}
+            />
           </View>
 
           <TouchableOpacity 
