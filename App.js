@@ -288,16 +288,18 @@ const handleLogout = async () => {
         text: 'Wyloguj', 
         style: 'destructive', 
         onPress: async () => {
-          await AsyncStorage.removeItem('user_jwt_token');
-          await AsyncStorage.removeItem('@saved_password'); // Usuwamy zapamiętane hasło
+          try {
+            await AsyncStorage.removeItem('user_jwt_token');
+          } catch (e) {
+            console.log('Błąd czyszczenia tokena', e);
+          }
           setAuthToken(null);
-          setAuthPassword(''); // Czyszczę pole hasła
           setItems([]);
+          setActiveTab('inventory'); // Reset zakładki na startową
         } 
       }
     ]);
   };
-
   const getAuthHeaders = () => ({
     headers: { Authorization: `Bearer ${authToken}` }
   });
