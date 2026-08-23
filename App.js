@@ -283,26 +283,31 @@ export default function App() {
   };
 
 const handleLogout = async () => {
-  Alert.alert('Wylogowanie', 'Czy na pewno chcesz się wylogować?', [
-    { text: 'Anuluj', style: 'cancel' },
-    { 
-      text: 'Wyloguj', 
-      style: 'destructive', 
-      onPress: async () => {
-        try {
-          await AsyncStorage.removeItem('user_jwt_token');
-          await AsyncStorage.removeItem('@saved_password');
-        } catch (e) {
-          console.log('Błąd czyszczenia pamięci', e);
-        }
-        setAuthToken(null);
-        setItems([]);
-        setActiveTab('inventory');
-        setForceUpdate(prev => prev + 1); // Wymusza przerysowanie komponentu głównego
-      } 
-    }
-  ]);
-};
+    Alert.alert('Wylogowanie', 'Czy na pewno chcesz się wylogować?', [
+      { text: 'Anuluj', style: 'cancel' },
+      { 
+        text: 'Kategoryczne Wylogowanie', 
+        style: 'destructive', 
+        onPress: async () => {
+          try {
+            // Czyszczenie wszelkich możliwych kluczy sesji i danych w AsyncStorage
+            await AsyncStorage.removeItem('user_jwt_token');
+            await AsyncStorage.removeItem('@saved_username');
+            await AsyncStorage.removeItem('@saved_password');
+            await AsyncStorage.clear(); // Czyści całą pamięć lokalną aplikacji na wszelki wypadek
+          } catch (e) {
+            console.log('Błąd czyszczenia pamięci', e);
+          }
+          setAuthToken(null);
+          setAuthUsername('');
+          setAuthPassword('');
+          setItems([]);
+          setActiveTab('inventory');
+          setForceUpdate(prev => prev + 1);
+        } 
+      }
+    ]);
+  };
   const getAuthHeaders = () => ({
     headers: { Authorization: `Bearer ${authToken}` }
   });
