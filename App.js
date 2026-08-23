@@ -134,9 +134,10 @@ const PREDEFINED_COLORS = [
 export default function App() {
   const [authToken, setAuthToken] = useState(null);
   const [authChecking, setAuthChecking] = useState(true);
-  const [authMode, setAuthMode] = useState('login'); // 'login' lub 'register'
+  const [authMode, setAuthMode] = useState('login');
   const [authUsername, setAuthUsername] = useState('');
   const [authPassword, setAuthPassword] = useState('');
+  const [showAuthPassword, setShowAuthPassword] = useState(false); // Podgląd hasła na ekranie logowania
   const [authLoading, setAuthLoading] = useState(false);
 
   const [themeMode, setThemeMode] = useState('light');
@@ -222,21 +223,27 @@ export default function App() {
   const dynamicCellSize = Math.floor((SCREEN_WIDTH - 32 - (GRID_CONTAINER_PADDING * 2)) / gridCols);
   const dynamicSubCellSize = Math.floor((SCREEN_WIDTH - 32 - (GRID_CONTAINER_PADDING * 2)) / subGridCols);
 
-  // Sprawdzanie zapisanej sesji przy starcie
+  // Sprawdzanie zapisanej sesji oraz danych logowania przy starcie
   useEffect(() => {
-    const loadToken = async () => {
+    const loadSessionAndCredentials = async () => {
       try {
         const savedToken = await AsyncStorage.getItem('user_jwt_token');
+        const savedUser = await AsyncStorage.getItem('@saved_username');
+        const savedPass = await AsyncStorage.getItem('@saved_password');
+
+        if (savedUser) setAuthUsername(savedUser);
+        if (savedPass) setAuthPassword(savedPass);
+
         if (savedToken) {
           setAuthToken(savedToken);
         }
       } catch (e) {
-        console.log('Błąd wczytywania tokena', e);
+        console.log('Błąd wczytywania danych sesji', e);
       } finally {
         setAuthChecking(false);
       }
     };
-    loadToken();
+    loadSessionAndCredentials();
   }, []);
 
   // Pobieranie danych po zalogowaniu
@@ -260,9 +267,13 @@ export default function App() {
         password: authPassword
       });
       const token = response.data.token;
+      
+      // Zapis tokena oraz danych do szybkiego logowania
       await AsyncStorage.setItem('user_jwt_token', token);
+      await AsyncStorage.setItem('@saved_username', authUsername.trim());
+      await AsyncStorage.setItem('@saved_password', authPassword);
+
       setAuthToken(token);
-      setAuthPassword('');
     } catch (error) {
       Alert.alert('Błąd autoryzacji', error.response?.data?.detail || 'Wystąpił błąd połączenia.');
     } finally {
@@ -278,6 +289,7 @@ export default function App() {
         style: 'destructive', 
         onPress: async () => {
           await AsyncStorage.removeItem('user_jwt_token');
+          // Zapamiętane dane logowania zostawiamy w schowku, żeby użytkownik mógł łatwo wejść ponownie
           setAuthToken(null);
           setItems([]);
         } 
@@ -285,12 +297,10 @@ export default function App() {
     ]);
   };
 
-  // Helper do nagłówków z tokenem
   const getAuthHeaders = () => ({
     headers: { Authorization: `Bearer ${authToken}` }
   });
 
-  // PanResponder dla głównej siatki
   const gridPanResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => isGridEditorMode,
@@ -311,7 +321,6 @@ export default function App() {
     })
   ).current;
 
-  // PanResponder dla pod-siatki
   const subGridPanResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => isSubGridEditorMode,
@@ -1168,7 +1177,6 @@ export default function App() {
     );
   };
 
-  // Ekran ładowania sesji
   if (authChecking) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0f172a' }}>
@@ -1177,8 +1185,7 @@ export default function App() {
     );
   }
 
-  // Ekran logowania / rejestracji jeśli brak tokena
-// Ekran logowania / rejestracji jeśli brak tokena
+  // Ekran logowania / rejestracji z podglądem hasła
   if (!authToken) {
     return (
       <SafeAreaProvider>
@@ -1200,14 +1207,22 @@ export default function App() {
           />
 
           <Text style={{ color: '#94a3b8', fontSize: 13, fontWeight: '700', marginBottom: 6 }}>Hasło</Text>
-          <TextInput 
-            style={{ backgroundColor: '#1e293b', color: '#f8fafc', padding: 14, borderRadius: 10, fontSize: 15, marginBottom: 24, borderWidth: 1, borderColor: '#334155' }}
-            placeholder="minimum 4 znaki"
-            placeholderTextColor="#64748b"
-            secureTextEntry
-            value={authPassword}
-            onChangeText={setAuthPassword}
-          />
+          <View style={{ position: 'relative', justifyContent: 'center', marginBottom: 24 }}>
+            <TextInput 
+              style={{ backgroundColor: '#1e293b', color: '#f8fafc', padding: 14, paddingRight: 50, borderRadius: 10, fontSize: 15, borderWidth: 1, borderColor: '#334155' }}
+              placeholder="minimum 4 znaki"
+              placeholderTextColor="#64748b"
+              secureTextEntry={!showAuthPassword}
+              value={authPassword}
+              onChangeText={setAuthPassword}
+            />
+            <TouchableOpacity 
+              onPress={() => setShowAuthPassword(!showAuthPassword)}
+              style={{ position: 'absolute', right: 14, top: 14 }}
+            >
+              <Text style={{ fontSize: 18 }}>{showAuthPassword ? '👁️‍🗨️' : '👁️'}</Text>
+            </TouchableOpacity>
+          </View>
 
           <TouchableOpacity 
             style={{ backgroundColor: '#2563eb', padding: 16, borderRadius: 10, alignItems: 'center', marginBottom: 16 }}
@@ -2141,7 +2156,7 @@ export default function App() {
           </View>
         )}
 
-        {/* ==================== MODAL DODAWANIA POKOJU ==================== */}
+        {/* ==================== MODALS ==================== */}
         <Modal visible={isAddRoomDefModalVisible} animationType="slide" transparent={true}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalBackdrop}>
             <View style={[styles.modalContent, { backgroundColor: t.bgCard }]}>
@@ -2178,7 +2193,6 @@ export default function App() {
           </KeyboardAvoidingView>
         </Modal>
 
-        {/* ==================== MODAL EDYCJI POKOJU (Z PEŁNĄ PALETĄ BARW) ==================== */}
         <Modal visible={isEditRoomModalVisible} animationType="slide" transparent={true}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalBackdrop}>
             <View style={[styles.modalContent, { backgroundColor: t.bgCard }]}>
@@ -2218,7 +2232,6 @@ export default function App() {
           </KeyboardAvoidingView>
         </Modal>
 
-        {/* ==================== MODAL DODAWANIA MEBLA ==================== */}
         <Modal visible={isAddFurnDefModalVisible} animationType="slide" transparent={true}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalBackdrop}>
             <View style={[styles.modalContent, { backgroundColor: t.bgCard }]}>
@@ -2255,7 +2268,6 @@ export default function App() {
           </KeyboardAvoidingView>
         </Modal>
 
-        {/* ==================== MODAL FORMULARZA PRODUKTU ==================== */}
         <Modal visible={modalVisible} animationType="slide" transparent={true}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalBackdrop}>
             <View style={[styles.modalContent, { backgroundColor: t.bgCard }]}>
@@ -2481,17 +2493,11 @@ const styles = StyleSheet.create({
   addSpotBtnText: { color: '#ffffff', fontWeight: '700', fontSize: 12 },
   emptySpotContainer: { paddingVertical: 20, alignItems: 'center' },
   emptySpotText: { fontSize: 13, marginBottom: 10 },
-  fillSpotBtn: { backgroundColor: '#e7f3ff', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: '#b8daff' },
-  fillSpotBtnText: { color: '#1877f2', fontWeight: '700', fontSize: 12 },
 
   roomSelectContainer: { borderRadius: 12, padding: 12, borderWidth: 1, marginTop: 14, marginBottom: 10 },
   roomPillsRow: { flexDirection: 'row', gap: 8, paddingVertical: 6 },
   roomSelectPill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1.5, gap: 4 },
   roomSelectPillText: { fontSize: 12, fontWeight: '600', color: '#495057' },
-  selectedRoomBadge: { backgroundColor: '#d4edda', padding: 8, borderRadius: 6, alignItems: 'center', borderWidth: 1, borderColor: '#c3e6cb', marginTop: 6 },
-  selectedRoomBadgeText: { color: '#155724', fontSize: 13, fontWeight: '600' },
-  unselectedRoomAlert: { backgroundColor: '#fff3cd', padding: 8, borderRadius: 6, alignItems: 'center', borderWidth: 1, borderColor: '#ffeeba', marginTop: 6 },
-  unselectedRoomAlertText: { color: '#856404', fontSize: 12, fontWeight: '700' },
   optionalHeader: { fontSize: 12, fontWeight: '700', marginTop: 6, marginBottom: 4 },
   inputLabelSmall: { fontSize: 11, fontWeight: '600', marginBottom: 2 },
   modalInputSmall: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13 },
