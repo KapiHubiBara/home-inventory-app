@@ -145,11 +145,20 @@ export default function App() {
   const [authMode, setAuthMode] = useState('login');
   const [authUsername, setAuthUsername] = useState('');
   const [authPassword, setAuthPassword] = useState('');
+  const [authPin, setAuthPin] = useState('');
   const [showAuthPassword, setShowAuthPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
   const [authErrorMessage, setAuthErrorMessage] = useState('');
   const [forceUpdate, setForceUpdate] = useState(0);
+
+  // Stany dla resetowania hasła PIN-em
+  const [isResetModalVisible, setIsResetModalVisible] = useState(false);
+  const [resetUsername, setResetUsername] = useState('');
+  const [resetPin, setResetPin] = useState('');
+  const [resetNewPassword, setResetNewPassword] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetErrorMessage, setResetErrorMessage] = useState('');
 
   const [themeMode, setThemeMode] = useState('light');
   const t = THEMES[themeMode];
@@ -268,13 +277,27 @@ export default function App() {
       showAlert('Błąd', msg);
       return;
     }
+
+    if (authMode === 'register' && (!authPin.trim() || authPin.trim().length < 4)) {
+      const msg = 'PIN ratunkowy musi mieć minimum 4 cyfry.';
+      setAuthErrorMessage(msg);
+      showAlert('Błąd', msg);
+      return;
+    }
+
     try {
       setAuthLoading(true);
       const endpoint = authMode === 'login' ? '/auth/login' : '/auth/register';
-      const response = await axios.post(`${BACKEND_URL}${endpoint}`, {
+      const payload = {
         username: authUsername.trim(),
         password: authPassword
-      });
+      };
+
+      if (authMode === 'register') {
+        payload.pin = authPin.trim();
+      }
+
+      const response = await axios.post(`${BACKEND_URL}${endpoint}`, payload);
       const token = response.data.token;
       
       setAuthToken(token);
@@ -286,6 +309,7 @@ export default function App() {
       }
 
       setAuthPassword('');
+      setAuthPin('');
       setAuthErrorMessage('');
     } catch (error) {
       const status = error.response?.status;
@@ -311,6 +335,41 @@ export default function App() {
     }
   };
 
+  const handleResetPassword = async () => {
+    setResetErrorMessage('');
+    if (!resetUsername.trim() || !resetPin.trim() || !resetNewPassword.trim()) {
+      setResetErrorMessage('Wypełnij wszystkie pola formularza.');
+      return;
+    }
+
+    if (resetNewPassword.length < 4) {
+      setResetErrorMessage('Nowe hasło musi mieć minimum 4 znaki.');
+      return;
+    }
+
+    try {
+      setResetLoading(true);
+      await axios.post(`${BACKEND_URL}/auth/reset-password`, {
+        username: resetUsername.trim(),
+        pin: resetPin.trim(),
+        new_password: resetNewPassword
+      });
+
+      showAlert('Sukces', 'Hasło zostało pomyślnie zmienione! Możesz się teraz zalogować.');
+      setIsResetModalVisible(false);
+      setResetUsername('');
+      setResetPin('');
+      setResetNewPassword('');
+      setResetErrorMessage('');
+      setAuthErrorMessage('');
+    } catch (error) {
+      const detail = error.response?.data?.detail || 'Nie udało się zresetować hasła.';
+      setResetErrorMessage(typeof detail === 'string' ? detail : 'Błąd resetowania hasła.');
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
   const handleLogout = async () => {
     const doLogout = async () => {
       try {
@@ -321,6 +380,7 @@ export default function App() {
       setAuthToken(null);
       setAuthUsername('');
       setAuthPassword('');
+      setAuthPin('');
       setRememberMe(false);
       setItems([]);
       setActiveTab('inventory');
@@ -1236,13 +1296,13 @@ export default function App() {
         <StatusBar barStyle="light-content" backgroundColor="#0f172a" />
         <SafeAreaView style={{ flex: 1, backgroundColor: '#0f172a', justifyContent: 'center', padding: 24 }}>
           <Text style={{ fontSize: 28, fontWeight: '900', color: '#f8fafc', marginBottom: 6, textAlign: 'center' }}>Home Inventory</Text>
-          <Text style={{ fontSize: 14, color: '#94a3b8', marginBottom: 30, textAlign: 'center' }}>
+          <Text style={{ fontSize: 14, color: '#94a3b8', marginBottom: 24, textAlign: 'center' }}>
             {authMode === 'login' ? 'Zaloguj się na swoje konto' : 'Utwórz nowe konto'}
           </Text>
 
           <Text style={{ color: '#94a3b8', fontSize: 13, fontWeight: '700', marginBottom: 6 }}>Nazwa użytkownika</Text>
           <TextInput 
-            style={{ backgroundColor: '#1e293b', color: '#f8fafc', padding: 14, borderRadius: 10, fontSize: 15, marginBottom: 16, borderWidth: 1, borderColor: '#334155' }}
+            style={{ backgroundColor: '#1e293b', color: '#f8fafc', padding: 14, borderRadius: 10, fontSize: 15, marginBottom: 14, borderWidth: 1, borderColor: '#334155' }}
             placeholder="np. hubert"
             placeholderTextColor="#64748b"
             autoCapitalize="none"
@@ -1251,7 +1311,7 @@ export default function App() {
           />
 
           <Text style={{ color: '#94a3b8', fontSize: 13, fontWeight: '700', marginBottom: 6 }}>Hasło</Text>
-          <View style={{ position: 'relative', justifyContent: 'center', marginBottom: 16 }}>
+          <View style={{ position: 'relative', justifyContent: 'center', marginBottom: 14 }}>
             <TextInput 
               style={{ backgroundColor: '#1e293b', color: '#f8fafc', padding: 14, paddingRight: 50, borderRadius: 10, fontSize: 15, borderWidth: 1, borderColor: '#334155' }}
               placeholder="minimum 4 znaki"
@@ -1267,6 +1327,23 @@ export default function App() {
               <Text style={{ fontSize: 18 }}>{showAuthPassword ? '👁️‍🗨️' : '👁️'}</Text>
             </TouchableOpacity>
           </View>
+
+          {authMode === 'register' && (
+            <>
+              <Text style={{ color: '#94a3b8', fontSize: 13, fontWeight: '700', marginBottom: 6 }}>
+                PIN ratunkowy do odzyskiwania konta (min. 4 cyfry)
+              </Text>
+              <TextInput 
+                style={{ backgroundColor: '#1e293b', color: '#f8fafc', padding: 14, borderRadius: 10, fontSize: 15, marginBottom: 14, borderWidth: 1, borderColor: '#334155' }}
+                placeholder="np. 1234"
+                placeholderTextColor="#64748b"
+                keyboardType="numeric"
+                maxLength={6}
+                value={authPin}
+                onChangeText={setAuthPin}
+              />
+            </>
+          )}
 
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, backgroundColor: '#1e293b', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#334155' }}>
             <Text style={{ color: '#f8fafc', fontSize: 14, fontWeight: '600' }}>Zapamiętaj mnie</Text>
@@ -1286,7 +1363,7 @@ export default function App() {
           ) : null}
 
           <TouchableOpacity 
-            style={{ backgroundColor: '#2563eb', padding: 16, borderRadius: 10, alignItems: 'center', marginBottom: 16 }}
+            style={{ backgroundColor: '#2563eb', padding: 16, borderRadius: 10, alignItems: 'center', marginBottom: 12 }}
             onPress={handleAuthSubmit}
             disabled={authLoading}
           >
@@ -1304,12 +1381,89 @@ export default function App() {
               setAuthMode(authMode === 'login' ? 'register' : 'login');
               setAuthErrorMessage('');
             }}
-            style={{ padding: 10, alignItems: 'center' }}
+            style={{ padding: 8, alignItems: 'center' }}
           >
             <Text style={{ color: '#93c5fd', fontSize: 14, fontWeight: '600' }}>
               {authMode === 'login' ? 'Nie masz konta? Zarejestruj się ➔' : 'Masz już konto? Zaloguj się ➔'}
             </Text>
           </TouchableOpacity>
+
+          {authMode === 'login' && (
+            <TouchableOpacity 
+              onPress={() => {
+                setResetErrorMessage('');
+                setIsResetModalVisible(true);
+              }}
+              style={{ padding: 8, alignItems: 'center', marginTop: 4 }}
+            >
+              <Text style={{ color: '#64748b', fontSize: 13, fontWeight: '600' }}>
+                Nie pamiętasz hasła? Zresetuj PIN-em
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {/* ==================== MODAL RESETOWANIA HASŁA PIN-EM ==================== */}
+          <Modal visible={isResetModalVisible} animationType="slide" transparent={true}>
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalBackdrop}>
+              <View style={[styles.modalContent, { backgroundColor: '#1e293b' }]}>
+                <Text style={[styles.modalTitle, { color: '#f8fafc' }]}>🔑 Reset hasła PIN-em</Text>
+                
+                <Text style={[styles.inputLabel, { color: '#94a3b8' }]}>Nazwa użytkownika</Text>
+                <TextInput 
+                  style={[styles.modalInput, { backgroundColor: '#0f172a', color: '#f8fafc' }]} 
+                  placeholder="Twój login"
+                  placeholderTextColor="#64748b"
+                  autoCapitalize="none"
+                  value={resetUsername}
+                  onChangeText={setResetUsername}
+                />
+
+                <Text style={[styles.inputLabel, { color: '#94a3b8' }]}>Twój 4-cyfrowy PIN ratunkowy</Text>
+                <TextInput 
+                  style={[styles.modalInput, { backgroundColor: '#0f172a', color: '#f8fafc' }]} 
+                  placeholder="np. 1234"
+                  placeholderTextColor="#64748b"
+                  keyboardType="numeric"
+                  maxLength={6}
+                  secureTextEntry
+                  value={resetPin}
+                  onChangeText={setResetPin}
+                />
+
+                <Text style={[styles.inputLabel, { color: '#94a3b8' }]}>Nowe hasło</Text>
+                <TextInput 
+                  style={[styles.modalInput, { backgroundColor: '#0f172a', color: '#f8fafc' }]} 
+                  placeholder="Wpisz nowe hasło (min. 4 znaki)"
+                  placeholderTextColor="#64748b"
+                  secureTextEntry
+                  value={resetNewPassword}
+                  onChangeText={setResetNewPassword}
+                />
+
+                {resetErrorMessage ? (
+                  <View style={{ backgroundColor: '#f87171', padding: 10, borderRadius: 8, marginTop: 10 }}>
+                    <Text style={{ color: '#7f1d1d', fontWeight: '700', fontSize: 13, textAlign: 'center' }}>
+                      ⚠️ {resetErrorMessage}
+                    </Text>
+                  </View>
+                ) : null}
+
+                <View style={[styles.modalActions, { borderTopColor: '#334155' }]}>
+                  <TouchableOpacity style={styles.cancelBtn} onPress={() => setIsResetModalVisible(false)}>
+                    <Text style={{ color: '#94a3b8', fontWeight: '600' }}>Anuluj</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={[styles.saveBtn, { backgroundColor: '#2563eb' }]} 
+                    onPress={handleResetPassword}
+                    disabled={resetLoading}
+                  >
+                    {resetLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>Zmień hasło</Text>}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </KeyboardAvoidingView>
+          </Modal>
+
         </SafeAreaView>
       </SafeAreaProvider>
     );
@@ -1327,7 +1481,7 @@ export default function App() {
               <View>
                 <Text style={[styles.headerTitle, { color: t.textMain }]}>Home Inventory</Text>
                 <Text style={[styles.headerSubtitle, { color: t.textSub }]}>
-                  {filteredAndSortedItems.length} {filteredAndSortedItems.length === 1 ? 'produkt' : 'produktów'}
+                  {filteredAndSortedItems.length} {filteredAndSortedItems.length === 1 ? 'produkt' : 'produktów'}[cite: 2]
                 </Text>
               </View>
 
@@ -1969,7 +2123,7 @@ export default function App() {
                             {inStockItems.filter(i => {
                               const loc = parseLocationHierarchy(i.location);
                               return loc.room === insideRoom && loc.furniture === selectedFurnitureOnMap;
-                            }).length} pozycji w tej strefie
+                            }).length} pozycji w tej strefie[cite: 2]
                           </Text>
                         </View>
                          
@@ -2187,7 +2341,7 @@ export default function App() {
               <View style={[styles.settingsCard, { backgroundColor: t.bgCard, borderColor: t.border }]}>
                 <Text style={[styles.settingsCardTitle, { color: t.textMain }]}>Hubercik Developer</Text>
                 <Text style={[styles.settingsCardSub, { color: t.textSub, marginTop: 8, lineHeight: 20 }]}>
-                  Autorem tego softu jest Hubercik – człowiek, dla którego bałagan jest stanem naturalnym, a moją główną życiową pasją jest gubienie rzeczy, o których istnieniu zapomniałem minutę po ich odłożeniu. Aplikacja powstała, bo mój mózg z ADHD wygenerował już tyle chaosu, że bez tego systemu prawdopodobnie szukałbym własnej lewej stopy przez trzy dni. Jeśli działa – ciesz się. Jeśli nie działa – cóż, przynajmniej jest estetycznie.
+                  Autorem tego softu jest Hubercik – człowiek, dla którego bałagan jest stanem naturalnym, a moją główną życiową pasją jest gubienie rzeczy, o których istnieniu zapomniałem minutę po ich odłożeniu. Aplikacja powstała, bo mój mózg z ADHD wygenerował już tyle chaosu, że bez tego systemu prawdopodobnie szukałbym własnej lewej stopy przez trzy dni. Jeśli działa – ciesz się. Jeśli nie działa – cóż, przynajmniej jest estetycznie.[cite: 2]
                 </Text>
               </View>
             </ScrollView>
