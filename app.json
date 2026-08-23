@@ -3,12 +3,15 @@
     "name": "home-inventory-app",
     "slug": "home-inventory-app",
     "version": "1.0.0",
-    "sdkVersion": "54.0.0",
-    "platforms": ["ios", "android"],
+    "platforms": ["ios", "android", "web"],
     "extra": {
       "eas": {
-        "projectId": "twoj-id-projektu" 
+        "projectId": "ad17bfd1-dbe7-477e-9b81-bce37feaed6a"
       }
+    },
+    "owner": "huberciks-team",
+    "android": {
+      "package": "com.huberciksteam.homeinventoryapp"
     }
   }
 }
