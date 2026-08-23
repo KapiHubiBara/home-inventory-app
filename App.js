@@ -1295,6 +1295,11 @@ export default function App() {
       <SafeAreaProvider>
         <StatusBar barStyle="light-content" backgroundColor="#0f172a" />
         <SafeAreaView style={{ flex: 1, backgroundColor: '#0f172a', justifyContent: 'center', padding: 24 }}>
+          <Image 
+            source={require('./assets/icon.png')} 
+            style={{ width: 90, height: 90, alignSelf: 'center', marginBottom: 16 }} 
+            resizeMode="contain" 
+          />
           <Text style={{ fontSize: 28, fontWeight: '900', color: '#f8fafc', marginBottom: 6, textAlign: 'center' }}>StashBrain</Text>
           <Text style={{ fontSize: 14, color: '#94a3b8', marginBottom: 24, textAlign: 'center' }}>
             {authMode === 'login' ? 'Zaloguj się na swoje konto' : 'Utwórz nowe konto'}
@@ -1872,7 +1877,7 @@ export default function App() {
                           <View style={{ flex: 1 }}>
                             <Text style={[styles.furnitureManagerTitle, { color: t.textMain }]}>🏠 {selectedRoomOnMap}</Text>
                             <Text style={styles.furnitureManagerSub}>
-                              {inStockItems.filter(i => parseLocationHierarchy(i.location).room === selectedRoomOnMap).length} pozycji w tym pokoju
+                              {inStockItems.filter(i => parseLocationHierarchy(i.location).room === selectedRoomOnMap).length} pozycji w tym pokoju[cite: 2]
                             </Text>
                           </View>
                            
