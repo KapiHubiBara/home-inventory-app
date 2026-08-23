@@ -1,17 +1,20 @@
 {
   "expo": {
-    "name": "home-inventory-app",
-    "slug": "home-inventory-app",
+    "name": "StashBrain",
+    "slug": "stashbrain",
     "version": "1.0.0",
-    "platforms": ["ios", "android", "web"],
-    "extra": {
-      "eas": {
-        "projectId": "ad17bfd1-dbe7-477e-9b81-bce37feaed6a"
-      }
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
     },
-    "owner": "huberciks-team",
-    "android": {
-      "package": "com.huberciksteam.homeinventoryapp"
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "name": "StashBrain",
+      "shortName": "StashBrain"
     }
   }
 }

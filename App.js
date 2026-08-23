@@ -1295,7 +1295,7 @@ export default function App() {
       <SafeAreaProvider>
         <StatusBar barStyle="light-content" backgroundColor="#0f172a" />
         <SafeAreaView style={{ flex: 1, backgroundColor: '#0f172a', justifyContent: 'center', padding: 24 }}>
-          <Text style={{ fontSize: 28, fontWeight: '900', color: '#f8fafc', marginBottom: 6, textAlign: 'center' }}>Home Inventory</Text>
+          <Text style={{ fontSize: 28, fontWeight: '900', color: '#f8fafc', marginBottom: 6, textAlign: 'center' }}>StashBrain</Text>
           <Text style={{ fontSize: 14, color: '#94a3b8', marginBottom: 24, textAlign: 'center' }}>
             {authMode === 'login' ? 'Zaloguj się na swoje konto' : 'Utwórz nowe konto'}
           </Text>
@@ -1479,7 +1479,7 @@ export default function App() {
           <View style={[styles.container, { backgroundColor: t.bgContent }]}>
             <View style={[styles.header, { backgroundColor: t.bgApp }]}>
               <View>
-                <Text style={[styles.headerTitle, { color: t.textMain }]}>Home Inventory</Text>
+                <Text style={[styles.headerTitle, { color: t.textMain }]}>StashBrain</Text>
                 <Text style={[styles.headerSubtitle, { color: t.textSub }]}>
                   {filteredAndSortedItems.length} {filteredAndSortedItems.length === 1 ? 'produkt' : 'produktów'}[cite: 2]
                 </Text>
