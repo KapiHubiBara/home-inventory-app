@@ -28,6 +28,14 @@ const BACKEND_URL = 'https://home-inventory-backend-nfun.onrender.com';
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const GRID_CONTAINER_PADDING = 10;
 
+const showAlert = (title, message) => {
+  if (Platform.OS === 'web') {
+    window.alert(`${title}: ${message}`);
+  } else {
+    Alert.alert(title, message);
+  }
+};
+
 const THEMES = {
   light: {
     isDark: false,
@@ -140,6 +148,7 @@ export default function App() {
   const [showAuthPassword, setShowAuthPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
+  const [authErrorMessage, setAuthErrorMessage] = useState('');
   const [forceUpdate, setForceUpdate] = useState(0);
 
   const [themeMode, setThemeMode] = useState('light');
@@ -225,7 +234,6 @@ export default function App() {
   const dynamicCellSize = Math.floor((SCREEN_WIDTH - 32 - (GRID_CONTAINER_PADDING * 2)) / gridCols);
   const dynamicSubCellSize = Math.floor((SCREEN_WIDTH - 32 - (GRID_CONTAINER_PADDING * 2)) / subGridCols);
 
-  // Pobieranie danych po zalogowaniu
   useEffect(() => {
     if (authToken) {
       fetchItems();
@@ -234,8 +242,11 @@ export default function App() {
   }, [authToken]);
 
   const handleAuthSubmit = async () => {
+    setAuthErrorMessage('');
     if (!authUsername.trim() || !authPassword.trim()) {
-      Alert.alert('Błąd', 'Wpisz nazwę użytkownika i hasło.');
+      const msg = 'Wpisz nazwę użytkownika i hasło.';
+      setAuthErrorMessage(msg);
+      showAlert('Błąd', msg);
       return;
     }
     try {
@@ -260,47 +271,57 @@ export default function App() {
       }
 
       setAuthPassword('');
+      setAuthErrorMessage('');
     } catch (error) {
-      const errorDetail = error.response?.data?.detail || '';
-      
+      const status = error.response?.status;
+      const detail = error.response?.data?.detail || '';
+      let errorMsg = 'Wystąpił nieoczekiwany błąd logowania.';
+
       if (authMode === 'login') {
-        if (typeof errorDetail === 'string' && errorDetail.toLowerCase().includes('user')) {
-          Alert.alert('Błąd logowania', 'Nie znaleziono użytkownika.');
-        } else if (typeof errorDetail === 'string' && (errorDetail.toLowerCase().includes('password') || errorDetail.toLowerCase().includes('credential') || errorDetail.toLowerCase().includes('incorrect'))) {
-          Alert.alert('Błąd logowania', 'Błędne hasło.');
+        if (status === 404 || (typeof detail === 'string' && detail.toLowerCase().includes('user'))) {
+          errorMsg = 'Nie znaleziono użytkownika.';
+        } else if (status === 401 || (typeof detail === 'string' && (detail.toLowerCase().includes('password') || detail.toLowerCase().includes('credential') || detail.toLowerCase().includes('incorrect')))) {
+          errorMsg = 'Błędne hasło.';
         } else {
-          Alert.alert('Błąd logowania', errorDetail || 'Nie znaleziono użytkownika lub podano błędne hasło.');
+          errorMsg = typeof detail === 'string' && detail ? detail : 'Nie znaleziono użytkownika lub błędne hasło.';
         }
       } else {
-        Alert.alert('Błąd rejestracji', errorDetail || 'Wystąpił błąd podczas tworzenia konta.');
+        errorMsg = typeof detail === 'string' && detail ? detail : 'Błąd rejestracji – użytkownik może już istnieć.';
       }
+
+      setAuthErrorMessage(errorMsg);
+      showAlert('Błąd', errorMsg);
     } finally {
       setAuthLoading(false);
     }
   };
 
   const handleLogout = async () => {
-    Alert.alert('Wylogowanie', 'Czy na pewno chcesz się wylogować?', [
-      { text: 'Anuluj', style: 'cancel' },
-      { 
-        text: 'Wyloguj', 
-        style: 'destructive', 
-        onPress: async () => {
-          try {
-            await AsyncStorage.clear();
-          } catch (e) {
-            console.log('Błąd czyszczenia pamięci', e);
-          }
-          setAuthToken(null);
-          setAuthUsername('');
-          setAuthPassword('');
-          setRememberMe(false);
-          setItems([]);
-          setActiveTab('inventory');
-          setForceUpdate(prev => prev + 1);
-        } 
+    const doLogout = async () => {
+      try {
+        await AsyncStorage.clear();
+      } catch (e) {
+        console.log('Błąd czyszczenia pamięci', e);
       }
-    ]);
+      setAuthToken(null);
+      setAuthUsername('');
+      setAuthPassword('');
+      setRememberMe(false);
+      setItems([]);
+      setActiveTab('inventory');
+      setForceUpdate(prev => prev + 1);
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm('Czy na pewno chcesz się wylogować?')) {
+        await doLogout();
+      }
+    } else {
+      Alert.alert('Wylogowanie', 'Czy na pewno chcesz się wylogować?', [
+        { text: 'Anuluj', style: 'cancel' },
+        { text: 'Wyloguj', style: 'destructive', onPress: doLogout }
+      ]);
+    }
   };
 
   const getAuthHeaders = () => ({
@@ -440,7 +461,7 @@ export default function App() {
     if (isGridEditorMode) {
       await saveMapConfig(themeMode, inventoryViewMode);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert("Sukces", "Plan mieszkania został zapisany w bazie!");
+      showAlert("Sukces", "Plan mieszkania został zapisany w bazie!");
     }
     setIsGridEditorMode(!isGridEditorMode);
   };
@@ -601,102 +622,102 @@ export default function App() {
   };
 
   const handleDeleteWholeRoom = (roomDef) => {
-    Alert.alert(
-      "Usuń pokój",
-      `Czy na pewno chcesz usunąć pokój "${roomDef.name}" z mapy?`,
-      [
+    const deleteAction = () => {
+      setGridCells(prev => {
+        const updated = { ...prev };
+        Object.keys(updated).forEach(k => {
+          if (updated[k] === roomDef.id) updated[k] = null;
+        });
+        return updated;
+      });
+      setRoomDefs(prev => prev.filter(r => r.id !== roomDef.id));
+      if (activePaintTool === roomDef.id) setActivePaintTool('eraser');
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm(`Czy na pewno chcesz usunąć pokój "${roomDef.name}" z mapy?`)) {
+        deleteAction();
+      }
+    } else {
+      Alert.alert("Usuń pokój", `Czy na pewno chcesz usunąć pokój "${roomDef.name}" z mapy?`, [
         { text: "Anuluj", style: "cancel" },
-        { 
-          text: "Usuń pokój", 
-          style: "destructive", 
-          onPress: () => {
-            setGridCells(prev => {
-              const updated = { ...prev };
-              Object.keys(updated).forEach(k => {
-                if (updated[k] === roomDef.id) updated[k] = null;
-              });
-              return updated;
-            });
-            setRoomDefs(prev => prev.filter(r => r.id !== roomDef.id));
-            if (activePaintTool === roomDef.id) setActivePaintTool('eraser');
-          } 
-        }
-      ]
-    );
+        { text: "Usuń pokój", style: "destructive", onPress: deleteAction }
+      ]);
+    }
   };
 
   const handleDeleteWholeFurniture = (furnDef) => {
-    Alert.alert(
-      "Usuń mebel",
-      `Czy na pewno chcesz usunąć mebel "${furnDef.name}" z pokoju?`,
-      [
+    const deleteAction = () => {
+      setSubGridCells(prev => {
+        const updated = { ...prev };
+        Object.keys(updated).forEach(k => {
+          if (updated[k] === furnDef.id) updated[k] = null;
+        });
+        return updated;
+      });
+      setSubGridDefs(prev => {
+        const list = prev[insideRoom] || [];
+        return { ...prev, [insideRoom]: list.filter(f => f.id !== furnDef.id) };
+      });
+      if (activeSubPaintTool === furnDef.id) setActiveSubPaintTool('eraser');
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm(`Czy na pewno chcesz usunąć mebel "${furnDef.name}" z pokoju?`)) {
+        deleteAction();
+      }
+    } else {
+      Alert.alert("Usuń mebel", `Czy na pewno chcesz usunąć mebel "${furnDef.name}" z pokoju?`, [
         { text: "Anuluj", style: "cancel" },
-        { 
-          text: "Usuń mebel", 
-          style: "destructive", 
-          onPress: () => {
-            setSubGridCells(prev => {
-              const updated = { ...prev };
-              Object.keys(updated).forEach(k => {
-                if (updated[k] === furnDef.id) updated[k] = null;
-              });
-              return updated;
-            });
-            setSubGridDefs(prev => {
-              const list = prev[insideRoom] || [];
-              return { ...prev, [insideRoom]: list.filter(f => f.id !== furnDef.id) };
-            });
-            if (activeSubPaintTool === furnDef.id) setActiveSubPaintTool('eraser');
-          } 
-        }
-      ]
-    );
+        { text: "Usuń mebel", style: "destructive", onPress: deleteAction }
+      ]);
+    }
   };
 
   const handleClearWholeGrid = () => {
-    Alert.alert(
-      "Wyczyść całą mapę",
-      "Zresetować wszystkie kratki mieszkań do pustych pól?",
-      [
-        { text: "Anuluj", style: "cancel" },
-        { 
-          text: "Wyczyść", 
-          style: "destructive", 
-          onPress: () => {
-            const empty = {};
-            for (let r = 0; r < gridRows; r++) {
-              for (let c = 0; c < gridCols; c++) {
-                empty[`${r}-${c}`] = null;
-              }
-            }
-            setGridCells(empty);
-          } 
+    const clearAction = () => {
+      const empty = {};
+      for (let r = 0; r < gridRows; r++) {
+        for (let c = 0; c < gridCols; c++) {
+          empty[`${r}-${c}`] = null;
         }
-      ]
-    );
+      }
+      setGridCells(empty);
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm("Zresetować wszystkie kratki mieszkań do pustych pól?")) {
+        clearAction();
+      }
+    } else {
+      Alert.alert("Wyczyść całą mapę", "Zresetować wszystkie kratki mieszkań do pustych pól?", [
+        { text: "Anuluj", style: "cancel" },
+        { text: "Wyczyść", style: "destructive", onPress: clearAction }
+      ]);
+    }
   };
 
   const handleClearWholeSubGrid = () => {
-    Alert.alert(
-      "Wyczyść układ pokoju",
-      "Zresetować wszystkie kratki w tym pokoju?",
-      [
-        { text: "Anuluj", style: "cancel" },
-        { 
-          text: "Wyczyść", 
-          style: "destructive", 
-          onPress: () => {
-            const empty = {};
-            for (let r = 0; r < subGridRows; r++) {
-              for (let c = 0; c < subGridCols; c++) {
-                empty[`${r}-${c}`] = null;
-              }
-            }
-            setSubGridCells(empty);
-          } 
+    const clearAction = () => {
+      const empty = {};
+      for (let r = 0; r < subGridRows; r++) {
+        for (let c = 0; c < subGridCols; c++) {
+          empty[`${r}-${c}`] = null;
         }
-      ]
-    );
+      }
+      setSubGridCells(empty);
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm("Zresetować wszystkie kratki w tym pokoju?")) {
+        clearAction();
+      }
+    } else {
+      Alert.alert("Wyczyść układ pokoju", "Zresetować wszystkie kratki w tym pokoju?", [
+        { text: "Anuluj", style: "cancel" },
+        { text: "Wyczyść", style: "destructive", onPress: clearAction }
+      ]);
+    }
   };
 
   const handleAddNewRoomDef = () => {
@@ -802,12 +823,12 @@ export default function App() {
 
   const handleSaveItem = async () => {
     if (!formName.trim()) {
-      Alert.alert('Błąd', 'Nazwa produktu jest wymagana.');
+      showAlert('Błąd', 'Nazwa produktu jest wymagana.');
       return;
     }
 
     if (!formRoom.trim()) {
-      Alert.alert('Wskaż pokój! 🗺️', 'Wybierz pokój na siatce mieszkania.');
+      showAlert('Wskaż pokój! 🗺️', 'Wybierz pokój na siatce mieszkania.');
       return;
     }
 
@@ -838,7 +859,7 @@ export default function App() {
       if (isEditing) {
         await axios.put(`${BACKEND_URL}/items/${editingId}`, payload, getAuthHeaders());
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Alert.alert("Sukces", "Pomyślnie zaktualizowano magazyn!");
+        showAlert("Sukces", "Pomyślnie zaktualizowano magazyn!");
         setBoughtShoppingItemIds(prev => prev.filter(id => id !== editingId));
         setNewlyAddedItemIds(prev => [...new Set([...prev, editingId])]);
       } else {
@@ -846,33 +867,36 @@ export default function App() {
         const newId = response.data?.item?.id;
         if (newId) setNewlyAddedItemIds(prev => [...new Set([...prev, newId])]);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Alert.alert("Sukces", "Pomyślnie dodano produkt do magazynu!");
+        showAlert("Sukces", "Pomyślnie dodano produkt do magazynu!");
       }
       setModalVisible(false);
       fetchItems();
     } catch (error) {
-      console.log('Błąd zapisu produktu:', error.response?.data || error.message);
-      Alert.alert('Błąd zapisu', JSON.stringify(error.response?.data?.detail) || error.message);
+      showAlert('Błąd zapisu', JSON.stringify(error.response?.data?.detail) || error.message);
     }
   };
 
   const handleDeleteItem = (item) => {
-    Alert.alert("Usuń produkt", `Czy na pewno chcesz usunąć "${item.name}"?`, [
-      { text: "Anuluj", style: "cancel" },
-      { 
-        text: "Usuń", 
-        style: "destructive", 
-        onPress: async () => {
-          try {
-            await axios.delete(`${BACKEND_URL}/items/${item.id}`, getAuthHeaders());
-            setNewlyAddedItemIds(prev => prev.filter(id => id !== item.id));
-            fetchItems();
-          } catch (error) {
-            Alert.alert('Błąd usuwania', error.response?.data?.detail || error.message);
-          }
-        } 
+    const deleteAction = async () => {
+      try {
+        await axios.delete(`${BACKEND_URL}/items/${item.id}`, getAuthHeaders());
+        setNewlyAddedItemIds(prev => prev.filter(id => id !== item.id));
+        fetchItems();
+      } catch (error) {
+        showAlert('Błąd usuwania', error.response?.data?.detail || error.message);
       }
-    ]);
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm(`Czy na pewno chcesz usunąć "${item.name}"?`)) {
+        deleteAction();
+      }
+    } else {
+      Alert.alert("Usuń produkt", `Czy na pewno chcesz usunąć "${item.name}"?`, [
+        { text: "Anuluj", style: "cancel" },
+        { text: "Usuń", style: "destructive", onPress: deleteAction }
+      ]);
+    }
   };
 
   const handleUpdateFillLevel = async (item, newLevel) => {
@@ -885,7 +909,7 @@ export default function App() {
       if (newQty > 1) {
         newQty = newQty - 1;
         finalFillLevel = 100;
-        Alert.alert("Otwarto nowy zapas!", `Zużyto 1 opakowanie. Zostało: ${newQty} ${item.unit || 'szt'}.`);
+        showAlert("Otwarto nowy zapas!", `Zużyto 1 opakowanie. Zostało: ${newQty} ${item.unit || 'szt'}.`);
       } else {
         newQty = 0;
         newStatus = 'zużyte';
@@ -981,10 +1005,10 @@ export default function App() {
         image_url: scannedProduct.image_url || ''
       });
     } catch (error) {
-      Alert.alert("Nieznany kod EAN", `Kod: ${data}\nUzupełnij dane i wskaż pokój na siatce.`, [
-        { text: "Wskaż na mapie", onPress: () => { setScanned(false); setActiveTab('inventory'); handleOpenAddModal({ barcode: data }); } },
-        { text: "Skanuj ponownie", style: "cancel", onPress: () => setScanned(false) }
-      ]);
+      showAlert("Nieznany kod EAN", `Kod: ${data}\nUzupełnij dane i wskaż pokój na siatce.`);
+      setScanned(false);
+      setActiveTab('inventory');
+      handleOpenAddModal({ barcode: data });
     } finally {
       setScanningLoading(false);
     }
@@ -1191,7 +1215,6 @@ export default function App() {
     );
   }
 
-  // Ekran logowania / rejestracji bez automatycznego logowania w tle + przełącznik zapamiętywania
   if (!authToken) {
     return (
       <SafeAreaProvider>
@@ -1230,7 +1253,7 @@ export default function App() {
             </TouchableOpacity>
           </View>
 
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, backgroundColor: '#1e293b', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#334155' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, backgroundColor: '#1e293b', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#334155' }}>
             <Text style={{ color: '#f8fafc', fontSize: 14, fontWeight: '600' }}>Zapamiętaj mnie</Text>
             <Switch 
               value={rememberMe} 
@@ -1238,6 +1261,14 @@ export default function App() {
               trackColor={{ false: '#334155', true: '#2563eb' }}
             />
           </View>
+
+          {authErrorMessage ? (
+            <View style={{ backgroundColor: '#f87171', padding: 10, borderRadius: 8, marginBottom: 16 }}>
+              <Text style={{ color: '#7f1d1d', fontWeight: '700', fontSize: 13, textAlign: 'center' }}>
+                ⚠️ {authErrorMessage}
+              </Text>
+            </View>
+          ) : null}
 
           <TouchableOpacity 
             style={{ backgroundColor: '#2563eb', padding: 16, borderRadius: 10, alignItems: 'center', marginBottom: 16 }}
@@ -1254,7 +1285,10 @@ export default function App() {
           </TouchableOpacity>
 
           <TouchableOpacity 
-            onPress={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}
+            onPress={() => {
+              setAuthMode(authMode === 'login' ? 'register' : 'login');
+              setAuthErrorMessage('');
+            }}
             style={{ padding: 10, alignItems: 'center' }}
           >
             <Text style={{ color: '#93c5fd', fontSize: 14, fontWeight: '600' }}>
@@ -2171,7 +2205,7 @@ export default function App() {
           </View>
         )}
 
-        {/* ==================== MODALS ==================== */}
+        {/* ==================== MODAL DODAWANIA POKOJU ==================== */}
         <Modal visible={isAddRoomDefModalVisible} animationType="slide" transparent={true}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalBackdrop}>
             <View style={[styles.modalContent, { backgroundColor: t.bgCard }]}>
@@ -2208,6 +2242,7 @@ export default function App() {
           </KeyboardAvoidingView>
         </Modal>
 
+        {/* ==================== MODAL EDYCJI POKOJU ==================== */}
         <Modal visible={isEditRoomModalVisible} animationType="slide" transparent={true}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalBackdrop}>
             <View style={[styles.modalContent, { backgroundColor: t.bgCard }]}>
@@ -2247,6 +2282,7 @@ export default function App() {
           </KeyboardAvoidingView>
         </Modal>
 
+        {/* ==================== MODAL DODAWANIA MEBLA ==================== */}
         <Modal visible={isAddFurnDefModalVisible} animationType="slide" transparent={true}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalBackdrop}>
             <View style={[styles.modalContent, { backgroundColor: t.bgCard }]}>
@@ -2283,6 +2319,7 @@ export default function App() {
           </KeyboardAvoidingView>
         </Modal>
 
+        {/* ==================== MODAL FORMULARZA PRODUKTU ==================== */}
         <Modal visible={modalVisible} animationType="slide" transparent={true}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalBackdrop}>
             <View style={[styles.modalContent, { backgroundColor: t.bgCard }]}>
