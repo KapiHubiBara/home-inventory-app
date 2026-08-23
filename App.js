@@ -141,7 +141,7 @@ const PREDEFINED_COLORS = [
 
 export default function App() {
   const [authToken, setAuthToken] = useState(null);
-  const [authChecking, setAuthChecking] = useState(false);
+  const [authChecking, setAuthChecking] = useState(true);
   const [authMode, setAuthMode] = useState('login');
   const [authUsername, setAuthUsername] = useState('');
   const [authPassword, setAuthPassword] = useState('');
@@ -234,6 +234,25 @@ export default function App() {
   const dynamicCellSize = Math.floor((SCREEN_WIDTH - 32 - (GRID_CONTAINER_PADDING * 2)) / gridCols);
   const dynamicSubCellSize = Math.floor((SCREEN_WIDTH - 32 - (GRID_CONTAINER_PADDING * 2)) / subGridCols);
 
+  // Sprawdzanie zapisanej sesji przy starcie
+  useEffect(() => {
+    const checkSavedSession = async () => {
+      try {
+        const savedToken = await AsyncStorage.getItem('user_jwt_token');
+        if (savedToken) {
+          setAuthToken(savedToken);
+          setRememberMe(true);
+        }
+      } catch (e) {
+        console.log('Błąd odczytu sesji:', e);
+      } finally {
+        setAuthChecking(false);
+      }
+    };
+    checkSavedSession();
+  }, []);
+
+  // Pobieranie danych po zalogowaniu
   useEffect(() => {
     if (authToken) {
       fetchItems();
@@ -262,12 +281,8 @@ export default function App() {
 
       if (rememberMe) {
         await AsyncStorage.setItem('user_jwt_token', token);
-        await AsyncStorage.setItem('@saved_username', authUsername.trim());
-        await AsyncStorage.setItem('@saved_password', authPassword);
       } else {
         await AsyncStorage.removeItem('user_jwt_token');
-        await AsyncStorage.removeItem('@saved_username');
-        await AsyncStorage.removeItem('@saved_password');
       }
 
       setAuthPassword('');
