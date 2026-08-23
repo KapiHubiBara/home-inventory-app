@@ -281,7 +281,7 @@ export default function App() {
     }
   };
 
-  const handleLogout = async () => {
+const handleLogout = async () => {
     Alert.alert('Wylogowanie', 'Czy na pewno chcesz się wylogować?', [
       { text: 'Anuluj', style: 'cancel' },
       { 
@@ -289,8 +289,9 @@ export default function App() {
         style: 'destructive', 
         onPress: async () => {
           await AsyncStorage.removeItem('user_jwt_token');
-          // Zapamiętane dane logowania zostawiamy w schowku, żeby użytkownik mógł łatwo wejść ponownie
+          await AsyncStorage.removeItem('@saved_password'); // Usuwamy zapamiętane hasło
           setAuthToken(null);
+          setAuthPassword(''); // Czyszczę pole hasła
           setItems([]);
         } 
       }
