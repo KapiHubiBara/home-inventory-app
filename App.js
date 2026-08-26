@@ -422,6 +422,38 @@ export default function App() {
     headers: { Authorization: `Bearer ${authToken}` }
   });
 
+  const parseSafeJson = (data, fallback) => {
+    if (!data) return fallback;
+    if (typeof data === 'object') return data;
+    try {
+      return JSON.parse(data);
+    } catch (e) {
+      return fallback;
+    }
+  };
+
+  const fetchMapConfig = async () => {
+    try {
+      const response = await axios.get(`${BACKEND_URL}/map-config`, getAuthHeaders());
+      if (response.data && !response.data.error) {
+        const d = response.data;
+        if (d.gridRows) setGridRows(d.gridRows);
+        if (d.gridCols) setGridCols(d.gridCols);
+        if (d.gridCells) setGridCells(parseSafeJson(d.gridCells, {}));
+        if (d.roomDefs) setRoomDefs(parseSafeJson(d.roomDefs, INITIAL_ROOM_DEFS));
+        if (d.subGridRowsMap) setSubGridRowsMap(parseSafeJson(d.subGridRowsMap, {}));
+        if (d.subGridColsMap) setSubGridColsMap(parseSafeJson(d.subGridColsMap, {}));
+        if (d.subGridDefs) setSubGridDefs(parseSafeJson(d.subGridDefs, INITIAL_ROOM_FURNITURE_DEFS));
+        if (d.subGridCells) setSubGridCells(parseSafeJson(d.subGridCells, {}));
+        if (d.spotsDefs) setSpotsDefs(parseSafeJson(d.spotsDefs, {}));
+        if (d.themeMode) setThemeMode(d.themeMode);
+        if (d.inventoryViewMode) setInventoryViewMode(d.inventoryViewMode);
+      }
+    } catch (error) {
+      console.log('Brak zapisanego planu w bazie lub błąd:', error.message);
+    }
+  };
+
   const saveMapConfig = async (
     customSubCells = subGridCells,
     customSubDefs = subGridDefs,
@@ -435,13 +467,13 @@ export default function App() {
       await axios.post(`${BACKEND_URL}/map-config`, {
         gridRows,
         gridCols,
-        gridCells: customGridCells,
-        roomDefs: customRoomDefs,
-        subGridRowsMap: customSubRows,
-        subGridColsMap: customSubCols,
-        subGridDefs: customSubDefs,
-        subGridCells: customSubCells,
-        spotsDefs: customSpots,
+        gridCells: JSON.stringify(customGridCells),
+        roomDefs: JSON.stringify(customRoomDefs),
+        subGridRowsMap: JSON.stringify(customSubRows),
+        subGridColsMap: JSON.stringify(customSubCols),
+        subGridDefs: JSON.stringify(customSubDefs),
+        subGridCells: JSON.stringify(customSubCells),
+        spotsDefs: JSON.stringify(customSpots),
         themeMode,
         inventoryViewMode
       }, getAuthHeaders());
@@ -552,27 +584,6 @@ export default function App() {
       console.log('Błąd pobierania danych:', error.message);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchMapConfig = async () => {
-    try {
-      const response = await axios.get(`${BACKEND_URL}/map-config`, getAuthHeaders());
-      if (response.data && !response.data.error) {
-        if (response.data.gridRows) setGridRows(response.data.gridRows);
-        if (response.data.gridCols) setGridCols(response.data.gridCols);
-        if (response.data.gridCells) setGridCells(response.data.gridCells);
-        if (response.data.roomDefs) setRoomDefs(response.data.roomDefs);
-        if (response.data.subGridRowsMap) setSubGridRowsMap(response.data.subGridRowsMap);
-        if (response.data.subGridColsMap) setSubGridColsMap(response.data.subGridColsMap);
-        if (response.data.subGridDefs) setSubGridDefs(response.data.subGridDefs);
-        if (response.data.subGridCells) setSubGridCells(response.data.subGridCells);
-        if (response.data.spotsDefs) setSpotsDefs(response.data.spotsDefs);
-        if (response.data.themeMode) setThemeMode(response.data.themeMode);
-        if (response.data.inventoryViewMode) setInventoryViewMode(response.data.inventoryViewMode);
-      }
-    } catch (error) {
-      console.log('Brak zapisanego planu w bazie lub błąd:', error.message);
     }
   };
 
@@ -2244,7 +2255,6 @@ export default function App() {
                         </TouchableOpacity>
                       </View>
 
-                      {/* Poziom 3: Pudełka / Półki w meblu */}
                       <View style={{ marginBottom: 12 }}>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                           <Text style={[styles.dimLabel, { color: t.textSub }]}>Półki / Pudełka w tym meblu:</Text>
