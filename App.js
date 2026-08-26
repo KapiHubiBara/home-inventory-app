@@ -2903,7 +2903,11 @@ export default function App() {
                             styles.roomSelectPill,
                             { backgroundColor: isSelected ? '#1877f2' : rd.color, borderColor: isSelected ? '#0d6efd' : rd.border }
                           ]}
-                          onPress={() => setFormRoom(rd.name)}
+                          onPress={() => {
+                            setFormRoom(rd.name);
+                            setFormFurniture('');
+                            setFormSpot('');
+                          }}
                         >
                           <Text style={{ fontSize: 13 }}>{rd.icon}</Text>
                           <Text style={[styles.roomSelectPillText, isSelected && { color: '#ffffff', fontWeight: '800' }]}>
@@ -2916,13 +2920,80 @@ export default function App() {
                 </View>
 
                 <Text style={[styles.optionalHeader, { color: t.textSub }]}>Opcjonalne szczegóły wnętrza:</Text>
+                
+                {/* Rozwijana lista mebli dla wybranego pokoju */}
+                {(() => {
+                  const roomFurnList = subGridDefs[formRoom] || [];
+                  if (roomFurnList.length === 0) return null;
+                  return (
+                    <View style={{ marginBottom: 8 }}>
+                      <Text style={[styles.inputLabelSmall, { color: t.textSub }]}>Wybierz istniejący mebel:</Text>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.roomPillsRow}>
+                        {roomFurnList.map(furn => {
+                          const isSelected = formFurniture === furn.name;
+                          return (
+                            <TouchableOpacity
+                              key={furn.id}
+                              style={[
+                                styles.roomSelectPill,
+                                { backgroundColor: isSelected ? '#1877f2' : (furn.color || t.bgInput), borderColor: isSelected ? '#0d6efd' : (furn.border || t.border) }
+                              ]}
+                              onPress={() => {
+                                setFormFurniture(furn.name);
+                                setFormSpot('');
+                              }}
+                            >
+                              <Text style={{ fontSize: 12 }}>{furn.icon}</Text>
+                              <Text style={[styles.roomSelectPillText, isSelected && { color: '#ffffff', fontWeight: '800' }, { color: furn.textColor || t.textMain }]}>
+                                {furn.name}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </ScrollView>
+                    </View>
+                  );
+                })()}
+
+                {/* Rozwijana lista pudełek/półek dla wybranego mebla */}
+                {(() => {
+                  const spotKey = `${formRoom}>${formFurniture}`;
+                  const roomSpotList = spotsDefs[spotKey] || [];
+                  if (roomSpotList.length === 0) return null;
+                  return (
+                    <View style={{ marginBottom: 8 }}>
+                      <Text style={[styles.inputLabelSmall, { color: t.textSub }]}>Wybierz istniejące pudełko / półkę:</Text>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.roomPillsRow}>
+                        {roomSpotList.map(spot => {
+                          const isSelected = formSpot === spot;
+                          return (
+                            <TouchableOpacity
+                              key={spot}
+                              style={[
+                                styles.roomSelectPill,
+                                { backgroundColor: isSelected ? '#059669' : t.bgInput, borderColor: isSelected ? '#047857' : t.border }
+                              ]}
+                              onPress={() => setFormSpot(spot)}
+                            >
+                              <Text style={{ fontSize: 11 }}>📦</Text>
+                              <Text style={[styles.roomSelectPillText, isSelected && { color: '#ffffff', fontWeight: '800' }]}>
+                                {spot}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </ScrollView>
+                    </View>
+                  );
+                })()}
+
                 <View style={styles.formRow}>
                   <View style={{ flex: 1, marginRight: 6 }}>
-                    <Text style={[styles.inputLabelSmall, { color: t.textSub }]}>Mebel / Strefa</Text>
+                    <Text style={[styles.inputLabelSmall, { color: t.textSub }]}>Mebel / Strefa (własny wpis)</Text>
                     <TextInput style={[styles.modalInputSmall, { backgroundColor: t.bgInput, color: t.textMain }]} placeholder="np. Zlew / Lodówka" placeholderTextColor={t.emptyText} value={formFurniture} onChangeText={setFormFurniture} />
                   </View>
                   <View style={{ flex: 1, marginLeft: 6 }}>
-                    <Text style={[styles.inputLabelSmall, { color: t.textSub }]}>Półka / Pudełko</Text>
+                    <Text style={[styles.inputLabelSmall, { color: t.textSub }]}>Półka / Pudełko (własny wpis)</Text>
                     <TextInput style={[styles.modalInputSmall, { backgroundColor: t.bgInput, color: t.textMain }]} placeholder="np. Pudełko 1" placeholderTextColor={t.emptyText} value={formSpot} onChangeText={setFormSpot} />
                   </View>
                 </View>
