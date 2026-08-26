@@ -171,12 +171,11 @@ export default function App() {
   const [subGridRowsMap, setSubGridRowsMap] = useState({});
   const [subGridColsMap, setSubGridColsMap] = useState({});
   const [subGridDefs, setSubGridDefs] = useState(INITIAL_ROOM_FURNITURE_DEFS);
-  const [subGridCells, setSubGridCells] = useState({}); // { [roomName]: { "r-c": furnId } }
+  const [subGridCells, setSubGridCells] = useState({});
   const [isSubGridEditorMode, setIsSubGridEditorMode] = useState(false);
   const [activeSubPaintTool, setActiveSubPaintTool] = useState('furn-zlew');
   const [selectedFurnitureOnMap, setSelectedFurnitureOnMap] = useState(null);
 
-  // Poziom 3: Pudełka / Półki wewnątrz danego mebla
   const [spotsDefs, setSpotsDefs] = useState({});
   const [selectedSpotOnMap, setSelectedSpotOnMap] = useState(null);
   const [isAddSpotModalVisible, setIsAddSpotModalVisible] = useState(false);
@@ -231,7 +230,6 @@ export default function App() {
     '⚪ Brak daty'
   ];
 
-  // ==================== RESPONSYWNE SKALOWANIE MAPY DO OKNA ====================
   const [windowDimensions, setWindowDimensions] = useState(Dimensions.get('window'));
 
   useEffect(() => {
@@ -424,6 +422,34 @@ export default function App() {
     headers: { Authorization: `Bearer ${authToken}` }
   });
 
+  const saveMapConfig = async (
+    customSubCells = subGridCells,
+    customSubDefs = subGridDefs,
+    customSpots = spotsDefs,
+    customGridCells = gridCells,
+    customRoomDefs = roomDefs,
+    customSubRows = subGridRowsMap,
+    customSubCols = subGridColsMap
+  ) => {
+    try {
+      await axios.post(`${BACKEND_URL}/map-config`, {
+        gridRows,
+        gridCols,
+        gridCells: customGridCells,
+        roomDefs: customRoomDefs,
+        subGridRowsMap: customSubRows,
+        subGridColsMap: customSubCols,
+        subGridDefs: customSubDefs,
+        subGridCells: customSubCells,
+        spotsDefs: customSpots,
+        themeMode,
+        inventoryViewMode
+      }, getAuthHeaders());
+    } catch (error) {
+      console.log('Błąd zapisu konfiguracji:', error.message);
+    }
+  };
+
   const gridPanResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => isGridEditorMode,
@@ -550,37 +576,9 @@ export default function App() {
     }
   };
 
-  const saveMapConfig = async (
-    newTheme = themeMode, 
-    newViewMode = inventoryViewMode, 
-    overrideSpots = spotsDefs,
-    overrideSubCells = subGridCells,
-    overrideSubDefs = subGridDefs,
-    overrideSubRows = subGridRowsMap,
-    overrideSubCols = subGridColsMap
-  ) => {
-    try {
-      await axios.post(`${BACKEND_URL}/map-config`, {
-        gridRows,
-        gridCols,
-        gridCells,
-        roomDefs,
-        subGridRowsMap: overrideSubRows,
-        subGridColsMap: overrideSubCols,
-        subGridDefs: overrideSubDefs,
-        subGridCells: overrideSubCells,
-        spotsDefs: overrideSpots,
-        themeMode: newTheme,
-        inventoryViewMode: newViewMode
-      }, getAuthHeaders());
-    } catch (error) {
-      console.log('Błąd zapisu konfiguracji:', error.message);
-    }
-  };
-
   const handleToggleEditorMode = async () => {
     if (isGridEditorMode) {
-      await saveMapConfig(themeMode, inventoryViewMode);
+      await saveMapConfig(subGridCells, subGridDefs, spotsDefs, gridCells, roomDefs);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showAlert("Sukces", "Plan mieszkania został zapisany w bazie!");
     }
@@ -589,11 +587,18 @@ export default function App() {
 
   const handleToggleSubEditorMode = async () => {
     if (isSubGridEditorMode) {
-      await saveMapConfig(themeMode, inventoryViewMode, spotsDefs, subGridCells, subGridDefs, subGridRowsMap, subGridColsMap);
+      await saveMapConfig(subGridCells, subGridDefs, spotsDefs, gridCells, roomDefs, subGridRowsMap, subGridColsMap);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      showAlert("Sukces", `Układ pokoju "${insideRoom}" został zapisany w bazie!`);
+      showAlert("Sukces", `Układ pokoju "${insideRoom}" został trwale zapisany!`);
     }
     setIsSubGridEditorMode(!isSubGridEditorMode);
+  };
+
+  const handleLeaveRoom = async () => {
+    await saveMapConfig(subGridCells, subGridDefs, spotsDefs, gridCells, roomDefs, subGridRowsMap, subGridColsMap);
+    setInsideRoom(null);
+    setSelectedFurnitureOnMap(null);
+    setSelectedSpotOnMap(null);
   };
 
   const handleAddNewSpot = async () => {
@@ -606,20 +611,20 @@ export default function App() {
     setNewSpotName('');
     setIsAddSpotModalVisible(false);
     
-    await saveMapConfig(themeMode, inventoryViewMode, updatedSpots);
+    await saveMapConfig(subGridCells, subGridDefs, updatedSpots);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
   const handleThemeChange = async (mode) => {
     setThemeMode(mode);
     Haptics.selectionAsync();
-    await saveMapConfig(mode, inventoryViewMode);
+    await saveMapConfig(subGridCells, subGridDefs, spotsDefs, gridCells, roomDefs);
   };
 
   const handleViewModeChange = async (mode) => {
     setInventoryViewMode(mode);
     Haptics.selectionAsync();
-    await saveMapConfig(themeMode, mode);
+    await saveMapConfig(subGridCells, subGridDefs, spotsDefs, gridCells, roomDefs);
   };
 
   const handleDismissNewBadge = (itemId) => {
@@ -715,7 +720,7 @@ export default function App() {
     }
   };
 
-  const handleSubCellClick = (r, c) => {
+  const handleSubCellClick = async (r, c) => {
     if (!insideRoom) return;
     const key = `${r}-${c}`;
     const currentFurnDefs = subGridDefs[insideRoom] || [];
@@ -723,13 +728,18 @@ export default function App() {
 
     if (isSubGridEditorMode) {
       Haptics.selectionAsync();
-      setSubGridCells(prev => ({
-        ...prev,
-        [insideRoom]: {
-          ...(prev[insideRoom] || {}),
-          [key]: activeSubPaintTool === 'eraser' ? null : activeSubPaintTool
-        }
-      }));
+      const updatedRoomCells = {
+        ...roomCells,
+        [key]: activeSubPaintTool === 'eraser' ? null : activeSubPaintTool
+      };
+      
+      const updatedAllSubCells = {
+        ...subGridCells,
+        [insideRoom]: updatedRoomCells
+      };
+
+      setSubGridCells(updatedAllSubCells);
+      await saveMapConfig(updatedAllSubCells, subGridDefs, spotsDefs, gridCells, roomDefs, subGridRowsMap, subGridColsMap);
     } else {
       const assignedFurnId = roomCells[key];
       if (assignedFurnId) {
@@ -751,9 +761,11 @@ export default function App() {
 
   const handleSaveEditedRoom = () => {
     if (!newRoomDefName.trim() || !roomToEdit) return;
-    setRoomDefs(prev => prev.map(rd => rd.id === roomToEdit.id ? { ...rd, name: newRoomDefName.trim(), icon: newRoomDefIcon, color: roomToEdit.color } : rd));
+    const updatedDefs = roomDefs.map(rd => rd.id === roomToEdit.id ? { ...rd, name: newRoomDefName.trim(), icon: newRoomDefIcon, color: roomToEdit.color } : rd);
+    setRoomDefs(updatedDefs);
     setIsEditRoomModalVisible(false);
     setRoomToEdit(null);
+    saveMapConfig(subGridCells, subGridDefs, spotsDefs, gridCells, updatedDefs, subGridRowsMap, subGridColsMap);
   };
 
   const handleChangeGridDimension = (dimension, delta) => {
@@ -769,23 +781,27 @@ export default function App() {
     if (!insideRoom) return;
     Haptics.selectionAsync();
     if (dimension === 'rows') {
-      setSubGridRowsMap(prev => ({ ...prev, [insideRoom]: Math.max(4, Math.min(16, ((prev[insideRoom] || 6) + delta))) }));
+      const updatedRows = { ...subGridRowsMap, [insideRoom]: Math.max(4, Math.min(16, ((subGridRowsMap[insideRoom] || 6) + delta))) };
+      setSubGridRowsMap(updatedRows);
+      saveMapConfig(subGridCells, subGridDefs, spotsDefs, gridCells, roomDefs, updatedRows, subGridColsMap);
     } else {
-      setSubGridColsMap(prev => ({ ...prev, [insideRoom]: Math.max(4, Math.min(16, ((prev[insideRoom] || 8) + delta))) }));
+      const updatedCols = { ...subGridColsMap, [insideRoom]: Math.max(4, Math.min(16, ((subGridColsMap[insideRoom] || 8) + delta))) };
+      setSubGridColsMap(updatedCols);
+      saveMapConfig(subGridCells, subGridDefs, spotsDefs, gridCells, roomDefs, subGridRowsMap, updatedCols);
     }
   };
 
   const handleDeleteWholeRoom = (roomDef) => {
     const deleteAction = () => {
-      setGridCells(prev => {
-        const updated = { ...prev };
-        Object.keys(updated).forEach(k => {
-          if (updated[k] === roomDef.id) updated[k] = null;
-        });
-        return updated;
+      const updatedCells = { ...gridCells };
+      Object.keys(updatedCells).forEach(k => {
+        if (updatedCells[k] === roomDef.id) updatedCells[k] = null;
       });
-      setRoomDefs(prev => prev.filter(r => r.id !== roomDef.id));
+      const updatedDefs = roomDefs.filter(r => r.id !== roomDef.id);
+      setGridCells(updatedCells);
+      setRoomDefs(updatedDefs);
       if (activePaintTool === roomDef.id) setActivePaintTool('eraser');
+      saveMapConfig(subGridCells, subGridDefs, spotsDefs, updatedCells, updatedDefs, subGridRowsMap, subGridColsMap);
     };
 
     if (Platform.OS === 'web') {
@@ -803,18 +819,18 @@ export default function App() {
   const handleDeleteWholeFurniture = (furnDef) => {
     if (!insideRoom) return;
     const deleteAction = () => {
-      setSubGridCells(prev => {
-        const roomCells = { ...(prev[insideRoom] || {}) };
-        Object.keys(roomCells).forEach(k => {
-          if (roomCells[k] === furnDef.id) roomCells[k] = null;
-        });
-        return { ...prev, [insideRoom]: roomCells };
+      const roomCells = { ...(subGridCells[insideRoom] || {}) };
+      Object.keys(roomCells).forEach(k => {
+        if (roomCells[k] === furnDef.id) roomCells[k] = null;
       });
-      setSubGridDefs(prev => {
-        const list = prev[insideRoom] || [];
-        return { ...prev, [insideRoom]: list.filter(f => f.id !== furnDef.id) };
-      });
+      const updatedAllSubCells = { ...subGridCells, [insideRoom]: roomCells };
+      const currentList = subGridDefs[insideRoom] || [];
+      const updatedDefs = { ...subGridDefs, [insideRoom]: currentList.filter(f => f.id !== furnDef.id) };
+
+      setSubGridCells(updatedAllSubCells);
+      setSubGridDefs(updatedDefs);
       if (activeSubPaintTool === furnDef.id) setActiveSubPaintTool('eraser');
+      saveMapConfig(updatedAllSubCells, updatedDefs, spotsDefs, gridCells, roomDefs, subGridRowsMap, subGridColsMap);
     };
 
     if (Platform.OS === 'web') {
@@ -838,6 +854,7 @@ export default function App() {
         }
       }
       setGridCells(empty);
+      saveMapConfig(subGridCells, subGridDefs, spotsDefs, empty, roomDefs, subGridRowsMap, subGridColsMap);
     };
 
     if (Platform.OS === 'web') {
@@ -861,7 +878,9 @@ export default function App() {
           empty[`${r}-${c}`] = null;
         }
       }
-      setSubGridCells(prev => ({ ...prev, [insideRoom]: empty }));
+      const updatedAllSubCells = { ...subGridCells, [insideRoom]: empty };
+      setSubGridCells(updatedAllSubCells);
+      saveMapConfig(updatedAllSubCells, subGridDefs, spotsDefs, gridCells, roomDefs, subGridRowsMap, subGridColsMap);
     };
 
     if (Platform.OS === 'web') {
@@ -886,10 +905,12 @@ export default function App() {
       border: '#e599f7',
       textColor: '#ae3ec9'
     };
-    setRoomDefs(prev => [...prev, newDef]);
+    const updatedDefs = [...roomDefs, newDef];
+    setRoomDefs(updatedDefs);
     setActivePaintTool(newDef.id);
     setIsAddRoomDefModalVisible(false);
     setNewRoomDefName('');
+    saveMapConfig(subGridCells, subGridDefs, spotsDefs, gridCells, updatedDefs, subGridRowsMap, subGridColsMap);
   };
 
   const handleAddNewFurnDef = () => {
@@ -910,7 +931,7 @@ export default function App() {
     setActiveSubPaintTool(newDef.id);
     setIsAddFurnDefModalVisible(false);
     setNewFurnDefName('');
-    saveMapConfig(themeMode, inventoryViewMode, spotsDefs, subGridCells, updatedDefs, subGridRowsMap, subGridColsMap);
+    saveMapConfig(subGridCells, updatedDefs, spotsDefs, gridCells, roomDefs, subGridRowsMap, subGridColsMap);
   };
 
   const handleOpenAddModal = (initialData = {}) => {
@@ -1490,7 +1511,6 @@ export default function App() {
             </TouchableOpacity>
           )}
 
-          {/* MODAL RESETOWANIA HASŁA PIN-EM */}
           <Modal visible={isResetModalVisible} animationType="slide" transparent={true}>
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalBackdrop}>
               <View style={[styles.modalContent, { backgroundColor: '#1e293b' }]}>
@@ -2006,7 +2026,7 @@ export default function App() {
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, width: '100%', maxWidth: 1100 }}>
                   <TouchableOpacity 
                     style={{ backgroundColor: '#64748b', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 }}
-                    onPress={() => { setInsideRoom(null); setSelectedFurnitureOnMap(null); setSelectedSpotOnMap(null); }}
+                    onPress={handleLeaveRoom}
                   >
                     <Text style={{ color: '#ffffff', fontWeight: '700', fontSize: 13 }}>⬅️ Wróć do mieszkania</Text>
                   </TouchableOpacity>
