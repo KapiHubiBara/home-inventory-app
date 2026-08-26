@@ -1303,6 +1303,18 @@ export default function App() {
     }
   };
 
+  const handleQuickExpiry = (daysToAdd, monthsToAdd = 0, yearsToAdd = 0) => {
+    Haptics.selectionAsync();
+    const d = new Date();
+    if (daysToAdd) d.setDate(d.getDate() + daysToAdd);
+    if (monthsToAdd) d.setMonth(d.getMonth() + monthsToAdd);
+    if (yearsToAdd) d.setFullYear(d.getFullYear() + yearsToAdd);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    setFormExpiry(`${yyyy}-${mm}-${dd}`);
+  };
+
   const inStockItems = items.filter(item => {
     const { hasFill, fillLevel } = parseItemNotes(item.notes);
     if (item.status === 'zużyte' || item.quantity <= 0) return false;
@@ -3001,11 +3013,59 @@ export default function App() {
                 <View style={styles.formRow}>
                   <View style={{ flex: 1, marginRight: 8 }}>
                     <Text style={[styles.inputLabel, { color: t.textSub }]}>Liczba opakowań/sztuk *</Text>
-                    <TextInput style={[styles.modalInput, { backgroundColor: t.bgInput, color: t.textMain }]} placeholder="1" placeholderTextColor={t.emptyText} keyboardType="numeric" value={formQuantity} onChangeText={setFormQuantity} />
+                    
+                    {/* Szybkie pilsy ilości 1 do 5 */}
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.roomPillsRow, { paddingVertical: 2 }]}>
+                      {[1, 2, 3, 4, 5].map(num => {
+                        const isSelected = formQuantity === String(num);
+                        return (
+                          <TouchableOpacity
+                            key={num}
+                            style={[
+                              styles.roomSelectPill,
+                              { backgroundColor: isSelected ? '#1877f2' : t.bgInput, borderColor: isSelected ? '#0d6efd' : t.border, paddingHorizontal: 10, paddingVertical: 4 }
+                            ]}
+                            onPress={() => {
+                              Haptics.selectionAsync();
+                              setFormQuantity(String(num));
+                            }}
+                          >
+                            <Text style={[styles.roomSelectPillText, isSelected && { color: '#ffffff', fontWeight: '800' }, { fontSize: 11 }]}>
+                              {num}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+
+                    <TextInput style={[styles.modalInput, { backgroundColor: t.bgInput, color: t.textMain, marginTop: 4 }]} placeholder="1" placeholderTextColor={t.emptyText} keyboardType="numeric" value={formQuantity} onChangeText={setFormQuantity} />
                   </View>
+
                   <View style={{ flex: 1, marginLeft: 8 }}>
                     <Text style={[styles.inputLabel, { color: t.textSub }]}>Jednostka</Text>
-                    <TextInput style={[styles.modalInput, { backgroundColor: t.bgInput, color: t.textMain }]} placeholder="szt / butelka / rolka" placeholderTextColor={t.emptyText} value={formUnit} onChangeText={setFormUnit} />
+                    
+                    {/* Szybkie pilsy jednostek */}
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.roomPillsRow, { paddingVertical: 2 }]}>
+                      {['szt', 'opak.', 'kg', 'l', 'butelka', 'rolka'].map(u => {
+                        const isSelected = formUnit === u;
+                        return (
+                          <TouchableOpacity
+                            key={u}
+                            style={[
+                              styles.roomSelectPill,
+                              { backgroundColor: isSelected ? '#1877f2' : t.bgInput, borderColor: isSelected ? '#0d6efd' : t.border, paddingHorizontal: 8, paddingVertical: 4 }
+                            ]}
+                            onPress={() => setFormUnit(u)}
+                          >
+                            <Text style={[styles.roomSelectPillText, isSelected && { color: '#ffffff', fontWeight: '800' }, { fontSize: 11 }]}>
+                              {u}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+
+                    <TextInput style={[styles.modalInput, { backgroundColor: t.bgInput, color: t.textMain, marginTop: 4 }]} placeholder="szt / butelka" placeholderTextColor={t.emptyText} value={formUnit} onChangeText={setFormUnit} />
                   </View>
                 </View>
 
@@ -3038,14 +3098,13 @@ export default function App() {
 
                 <Text style={[styles.inputLabel, { color: t.textSub }]}>Kategoria</Text>
                 
-                {/* Rozwijana lista istniejących kategorii */}
+                {/* Rozwijana lista kategorii */}
                 {(() => {
                   const uniqueCategories = [...new Set(items.map(item => item.category).filter(Boolean))];
                   if (uniqueCategories.length === 0) return null;
                   return (
-                    <View style={{ marginBottom: 8 }}>
-                      <Text style={[styles.inputLabelSmall, { color: t.textSub }]}>Wybierz istniejącą kategorię:</Text>
-                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.roomPillsRow}>
+                    <View style={{ marginBottom: 4 }}>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.roomPillsRow, { paddingVertical: 2 }]}>
                         {uniqueCategories.map(cat => {
                           const isSelected = formCategory === cat;
                           return (
@@ -3053,13 +3112,12 @@ export default function App() {
                               key={cat}
                               style={[
                                 styles.roomSelectPill,
-                                { backgroundColor: isSelected ? '#1877f2' : t.bgInput, borderColor: isSelected ? '#0d6efd' : t.border }
+                                { backgroundColor: isSelected ? '#1877f2' : t.bgInput, borderColor: isSelected ? '#0d6efd' : t.border, paddingHorizontal: 8, paddingVertical: 4 }
                               ]}
                               onPress={() => setFormCategory(cat)}
                             >
-                              <Text style={{ fontSize: 11 }}>🏷️</Text>
-                              <Text style={[styles.roomSelectPillText, isSelected && { color: '#ffffff', fontWeight: '800' }]}>
-                                {cat}
+                              <Text style={[styles.roomSelectPillText, isSelected && { color: '#ffffff', fontWeight: '800' }, { fontSize: 11 }]}>
+                                🏷️ {cat}
                               </Text>
                             </TouchableOpacity>
                           );
@@ -3069,10 +3127,30 @@ export default function App() {
                   );
                 })()}
 
-                <TextInput style={[styles.modalInput, { backgroundColor: t.bgInput, color: t.textMain }]} placeholder="np. Biurowe, Narzędzia, Chemia" placeholderTextColor={t.emptyText} value={formCategory} onChangeText={setFormCategory} />
+                <TextInput style={[styles.modalInput, { backgroundColor: t.bgInput, color: t.textMain, marginTop: 4 }]} placeholder="np. Biurowe, Narzędzia, Chemia" placeholderTextColor={t.emptyText} value={formCategory} onChangeText={setFormCategory} />
 
                 <Text style={[styles.inputLabel, { color: t.textSub }]}>Data ważności (opcjonalnie)</Text>
-                <TextInput style={[styles.modalInput, { backgroundColor: t.bgInput, color: t.textMain }]} placeholder="RRRR-MM-DD" placeholderTextColor={t.emptyText} value={formExpiry} onChangeText={setFormExpiry} />
+                
+                {/* Szybkie skróty terminów ważności */}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.roomPillsRow, { paddingVertical: 2 }]}>
+                  <TouchableOpacity style={[styles.roomSelectPill, { backgroundColor: t.bgInput, borderColor: t.border, paddingHorizontal: 8, paddingVertical: 4 }]} onPress={() => handleQuickExpiry(7)}>
+                    <Text style={[styles.roomSelectPillText, { fontSize: 11 }]}>+ 7 dni</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.roomSelectPill, { backgroundColor: t.bgInput, borderColor: t.border, paddingHorizontal: 8, paddingVertical: 4 }]} onPress={() => handleQuickExpiry(0, 1)}>
+                    <Text style={[styles.roomSelectPillText, { fontSize: 11 }]}>+ 1 mies.</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.roomSelectPill, { backgroundColor: t.bgInput, borderColor: t.border, paddingHorizontal: 8, paddingVertical: 4 }]} onPress={() => handleQuickExpiry(0, 3)}>
+                    <Text style={[styles.roomSelectPillText, { fontSize: 11 }]}>+ 3 mies.</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.roomSelectPill, { backgroundColor: t.bgInput, borderColor: t.border, paddingHorizontal: 8, paddingVertical: 4 }]} onPress={() => handleQuickExpiry(0, 0, 1)}>
+                    <Text style={[styles.roomSelectPillText, { fontSize: 11 }]}>+ 1 rok</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.roomSelectPill, { backgroundColor: '#fee2e2', borderColor: '#fca5a5', paddingHorizontal: 8, paddingVertical: 4 }]} onPress={() => { Haptics.selectionAsync(); setFormExpiry(''); }}>
+                    <Text style={[styles.roomSelectPillText, { color: '#dc2626', fontSize: 11, fontWeight: '700' }]}>Wyczyść</Text>
+                  </TouchableOpacity>
+                </ScrollView>
+
+                <TextInput style={[styles.modalInput, { backgroundColor: t.bgInput, color: t.textMain, marginTop: 4 }]} placeholder="RRRR-MM-DD" placeholderTextColor={t.emptyText} value={formExpiry} onChangeText={setFormExpiry} />
               </ScrollView>
 
               <View style={[styles.modalActions, { borderTopColor: t.border }]}>
