@@ -3037,6 +3037,38 @@ export default function App() {
                 ) : null}
 
                 <Text style={[styles.inputLabel, { color: t.textSub }]}>Kategoria</Text>
+                
+                {/* Rozwijana lista istniejących kategorii */}
+                {(() => {
+                  const uniqueCategories = [...new Set(items.map(item => item.category).filter(Boolean))];
+                  if (uniqueCategories.length === 0) return null;
+                  return (
+                    <View style={{ marginBottom: 8 }}>
+                      <Text style={[styles.inputLabelSmall, { color: t.textSub }]}>Wybierz istniejącą kategorię:</Text>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.roomPillsRow}>
+                        {uniqueCategories.map(cat => {
+                          const isSelected = formCategory === cat;
+                          return (
+                            <TouchableOpacity
+                              key={cat}
+                              style={[
+                                styles.roomSelectPill,
+                                { backgroundColor: isSelected ? '#1877f2' : t.bgInput, borderColor: isSelected ? '#0d6efd' : t.border }
+                              ]}
+                              onPress={() => setFormCategory(cat)}
+                            >
+                              <Text style={{ fontSize: 11 }}>🏷️</Text>
+                              <Text style={[styles.roomSelectPillText, isSelected && { color: '#ffffff', fontWeight: '800' }]}>
+                                {cat}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </ScrollView>
+                    </View>
+                  );
+                })()}
+
                 <TextInput style={[styles.modalInput, { backgroundColor: t.bgInput, color: t.textMain }]} placeholder="np. Biurowe, Narzędzia, Chemia" placeholderTextColor={t.emptyText} value={formCategory} onChangeText={setFormCategory} />
 
                 <Text style={[styles.inputLabel, { color: t.textSub }]}>Data ważności (opcjonalnie)</Text>
