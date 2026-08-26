@@ -173,16 +173,27 @@ export default function App() {
   const [isAddSpotModalVisible, setIsAddSpotModalVisible] = useState(false);
   const [newSpotName, setNewSpotName] = useState('');
 
+  // Modale pokoju
   const [isAddRoomDefModalVisible, setIsAddRoomDefModalVisible] = useState(false);
   const [newRoomDefName, setNewRoomDefName] = useState('');
   const [newRoomDefIcon, setNewRoomDefIcon] = useState('📦');
 
   const [isEditRoomModalVisible, setIsEditRoomModalVisible] = useState(false);
   const [roomToEdit, setRoomToEdit] = useState(null);
+  const [editRoomName, setEditRoomName] = useState('');
+  const [editRoomIcon, setEditRoomIcon] = useState('');
+  const [editRoomColor, setEditRoomColor] = useState('');
 
+  // Modale mebla
   const [isAddFurnDefModalVisible, setIsAddFurnDefModalVisible] = useState(false);
   const [newFurnDefName, setNewFurnDefName] = useState('');
   const [newFurnDefIcon, setNewFurnDefIcon] = useState('🗄️');
+
+  const [isEditFurnModalVisible, setIsEditFurnModalVisible] = useState(false);
+  const [furnToEdit, setFurnToEdit] = useState(null);
+  const [editFurnName, setEditFurnName] = useState('');
+  const [editFurnIcon, setEditFurnIcon] = useState('');
+  const [editFurnColor, setEditFurnColor] = useState('');
 
   const [newlyAddedItemIds, setNewlyAddedItemIds] = useState([]);
   const [customShoppingItems, setCustomShoppingItems] = useState([]);
@@ -760,20 +771,112 @@ export default function App() {
     }
   };
 
+  // Obsługa edycji pokoju
   const openEditRoomModal = (roomDef) => {
     setRoomToEdit(roomDef);
-    setNewRoomDefName(roomDef.name);
-    setNewRoomDefIcon(roomDef.icon);
+    setEditRoomName(roomDef.name);
+    setEditRoomIcon(roomDef.icon);
+    setEditRoomColor(roomDef.color || '#ced4da');
     setIsEditRoomModalVisible(true);
   };
 
   const handleSaveEditedRoom = () => {
-    if (!newRoomDefName.trim() || !roomToEdit) return;
-    const updatedDefs = roomDefs.map(rd => rd.id === roomToEdit.id ? { ...rd, name: newRoomDefName.trim(), icon: newRoomDefIcon, color: roomToEdit.color } : rd);
+    if (!editRoomName.trim() || !roomToEdit) return;
+    const oldName = roomToEdit.name;
+    const newName = editRoomName.trim();
+
+    const updatedDefs = roomDefs.map(rd => rd.id === roomToEdit.id ? { 
+      ...rd, 
+      name: newName, 
+      icon: editRoomIcon, 
+      color: editRoomColor,
+      textColor: editRoomColor === '#495057' ? '#ffffff' : '#000000'
+    } : rd);
+
+    // Aktualizacja kluczy podsiatek jeśli zmieniono nazwę
+    let updatedSubGridDefs = { ...subGridDefs };
+    let updatedSubGridCells = { ...subGridCells };
+    let updatedSubRows = { ...subGridRowsMap };
+    let updatedSubCols = { ...subGridColsMap };
+
+    if (oldName !== newName) {
+      if (updatedSubGridDefs[oldName]) {
+        updatedSubGridDefs[newName] = updatedSubGridDefs[oldName];
+        delete updatedSubGridDefs[oldName];
+      }
+      if (updatedSubGridCells[oldName]) {
+        updatedSubGridCells[newName] = updatedSubGridCells[oldName];
+        delete updatedSubGridCells[oldName];
+      }
+      if (updatedSubRows[oldName]) {
+        updatedSubRows[newName] = updatedSubRows[oldName];
+        delete updatedSubRows[oldName];
+      }
+      if (updatedSubCols[oldName]) {
+        updatedSubCols[newName] = updatedSubCols[oldName];
+        delete updatedSubCols[oldName];
+      }
+      if (selectedRoomOnMap === oldName) setSelectedRoomOnMap(newName);
+      if (insideRoom === oldName) setInsideRoom(newName);
+    }
+
     setRoomDefs(updatedDefs);
+    setSubGridDefs(updatedSubGridDefs);
+    setSubGridCells(updatedSubGridCells);
+    setSubGridRowsMap(updatedSubRows);
+    setSubGridColsMap(updatedSubCols);
     setIsEditRoomModalVisible(false);
     setRoomToEdit(null);
-    saveMapConfig(subGridCells, subGridDefs, spotsDefs, gridCells, updatedDefs, subGridRowsMap, subGridColsMap);
+
+    saveMapConfig(updatedSubGridCells, updatedSubGridDefs, spotsDefs, gridCells, updatedDefs, updatedSubRows, updatedSubCols);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  };
+
+  // Obsługa edycji mebla
+  const openEditFurnModal = (furnDef) => {
+    setFurnToEdit(furnDef);
+    setEditFurnName(furnDef.name);
+    setEditFurnIcon(furnDef.icon);
+    setEditFurnColor(furnDef.color || '#a5d8ff');
+    setIsEditFurnModalVisible(true);
+  };
+
+  const handleSaveEditedFurn = () => {
+    if (!editFurnName.trim() || !furnToEdit || !insideRoom) return;
+    const oldName = furnToEdit.name;
+    const newName = editFurnName.trim();
+
+    const currentList = subGridDefs[insideRoom] || [];
+    const updatedDefs = {
+      ...subGridDefs,
+      [insideRoom]: currentList.map(fd => fd.id === furnToEdit.id ? {
+        ...fd,
+        name: newName,
+        icon: editFurnIcon,
+        color: editFurnColor,
+        textColor: editFurnColor === '#495057' ? '#ffffff' : '#1864ab'
+      } : fd)
+    };
+
+    // Aktualizacja powiązanych pudełek
+    let updatedSpots = { ...spotsDefs };
+    if (oldName !== newName) {
+      const oldKey = `${insideRoom}>${oldName}`;
+      const newKey = `${insideRoom}>${newName}`;
+      if (updatedSpots[oldKey]) {
+        updatedSpots[newKey] = updatedSpots[oldKey];
+        delete updatedSpots[oldKey];
+      }
+      if (selectedFurnitureOnMap === oldName) setSelectedFurnitureOnMap(newName);
+    }
+
+    setSubGridDefs(updatedDefs);
+    setSpotsDefs(updatedSpots);
+    setIsEditFurnModalVisible(false);
+    setFurnToEdit(null);
+
+    saveMapConfig(subGridCells, updatedDefs, updatedSpots, gridCells, roomDefs, subGridRowsMap, subGridColsMap);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
   const handleChangeGridDimension = (dimension, delta) => {
@@ -1934,7 +2037,7 @@ export default function App() {
                   {isGridEditorMode ? (
                     <View style={[styles.paintPaletteCard, { backgroundColor: t.bgCard, borderColor: t.border }]}>
                       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                        <Text style={[styles.paintPaletteTitle, { color: t.textMain }]}>Pędzle pokoi (przytrzymaj by edytować):</Text>
+                        <Text style={[styles.paintPaletteTitle, { color: t.textMain }]}>Pędzle pokoi (kliknij ✏️ by edytować):</Text>
                         <TouchableOpacity onPress={() => setIsAddRoomDefModalVisible(true)}>
                           <Text style={styles.addRoomDefBtnText}>+ Nowy pokój</Text>
                         </TouchableOpacity>
@@ -1959,6 +2062,13 @@ export default function App() {
                               >
                                 <Text style={{ fontSize: 14 }}>{rd.icon}</Text>
                                 <Text style={[styles.paintToolText, { color: rd.textColor }]}>{rd.name}</Text>
+                              </TouchableOpacity>
+
+                              <TouchableOpacity 
+                                style={styles.editBadgeIconBtn} 
+                                onPress={() => openEditRoomModal(rd)}
+                              >
+                                <Text style={styles.editBadgeIconBtnText}>✏️</Text>
                               </TouchableOpacity>
 
                               <TouchableOpacity 
@@ -2203,9 +2313,17 @@ export default function App() {
                             <TouchableOpacity 
                               style={styles.paintToolBadgeContent} 
                               onPress={() => setActiveSubPaintTool(fd.id)}
+                              onLongPress={() => openEditFurnModal(fd)}
                             >
                               <Text style={{ fontSize: 14 }}>{fd.icon}</Text>
                               <Text style={[styles.paintToolText, { color: fd.textColor }]}>{fd.name}</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity 
+                              style={styles.editBadgeIconBtn} 
+                              onPress={() => openEditFurnModal(fd)}
+                            >
+                              <Text style={styles.editBadgeIconBtnText}>✏️</Text>
                             </TouchableOpacity>
 
                             <TouchableOpacity 
@@ -2582,12 +2700,26 @@ export default function App() {
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalBackdrop}>
             <View style={[styles.modalContent, { backgroundColor: t.bgCard }]}>
               <Text style={[styles.modalTitle, { color: t.textMain }]}>Edytuj pokój: {roomToEdit?.name}</Text>
-              <Text style={[styles.inputLabel, { color: t.textSub }]}>Nowa nazwa:</Text>
+              <Text style={[styles.inputLabel, { color: t.textSub }]}>Nazwa:</Text>
               <TextInput 
                 style={[styles.modalInput, { backgroundColor: t.bgInput, color: t.textMain }]} 
-                value={newRoomDefName} 
-                onChangeText={setNewRoomDefName} 
+                value={editRoomName} 
+                onChangeText={setEditRoomName} 
               />
+              
+              <Text style={[styles.inputLabel, { color: t.textSub }]}>Wybierz ikonę:</Text>
+              <View style={styles.iconGrid}>
+                {['🛏️', '🛋️', '🍳', '🥫', '🚿', '🚗', '📦', '🌿', '🖥️', '📚', '🧹', '🚪'].map(icon => (
+                  <TouchableOpacity 
+                    key={icon} 
+                    style={[styles.iconChoice, { backgroundColor: t.bgInput, borderColor: t.border }, editRoomIcon === icon && styles.iconChoiceActive]} 
+                    onPress={() => setEditRoomIcon(icon)}
+                  >
+                    <Text style={{ fontSize: 20 }}>{icon}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
               <Text style={[styles.inputLabel, { color: t.textSub }]}>Wybierz kolor z palety:</Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginVertical: 10 }}>
                 {PREDEFINED_COLORS.map(color => (
@@ -2598,10 +2730,10 @@ export default function App() {
                       height: 36,
                       borderRadius: 18,
                       backgroundColor: color,
-                      borderWidth: roomToEdit?.color === color ? 3 : 1,
-                      borderColor: roomToEdit?.color === color ? '#1877f2' : '#ced4da'
+                      borderWidth: editRoomColor === color ? 3 : 1,
+                      borderColor: editRoomColor === color ? '#1877f2' : '#ced4da'
                     }}
-                    onPress={() => setRoomToEdit(prev => ({ ...prev, color }))}
+                    onPress={() => setEditRoomColor(color)}
                   />
                 ))}
               </View>
@@ -2632,7 +2764,7 @@ export default function App() {
               />
               <Text style={[styles.inputLabel, { color: t.textSub }]}>Wybierz ikonę:</Text>
               <View style={styles.iconGrid}>
-                {['🗄️', '🧊', '🚰', '📦', '🍽️', '🧺', '🪵', '🔥'].map(icon => (
+                {['🗄️', '🧊', '🚰', '📦', '🍽️', '🧺', '🪵', '🔥', '🚪', '🛋️', '🖥️', '📚'].map(icon => (
                   <TouchableOpacity 
                     key={icon} 
                     style={[styles.iconChoice, { backgroundColor: t.bgInput, borderColor: t.border }, newFurnDefIcon === icon && styles.iconChoiceActive]} 
@@ -2648,6 +2780,60 @@ export default function App() {
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.saveBtn} onPress={handleAddNewFurnDef}>
                   <Text style={styles.saveBtnText}>Dodaj mebel</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
+
+        {/* ==================== MODAL EDYCJI MEBLA ==================== */}
+        <Modal visible={isEditFurnModalVisible} animationType="slide" transparent={true}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalBackdrop}>
+            <View style={[styles.modalContent, { backgroundColor: t.bgCard }]}>
+              <Text style={[styles.modalTitle, { color: t.textMain }]}>Edytuj mebel: {furnToEdit?.name}</Text>
+              <Text style={[styles.inputLabel, { color: t.textSub }]}>Nazwa:</Text>
+              <TextInput 
+                style={[styles.modalInput, { backgroundColor: t.bgInput, color: t.textMain }]} 
+                value={editFurnName} 
+                onChangeText={setEditFurnName} 
+              />
+
+              <Text style={[styles.inputLabel, { color: t.textSub }]}>Wybierz ikonę:</Text>
+              <View style={styles.iconGrid}>
+                {['🗄️', '🧊', '🚰', '📦', '🍽️', '🧺', '🪵', '🔥', '🚪', '🛋️', '🖥️', '📚'].map(icon => (
+                  <TouchableOpacity 
+                    key={icon} 
+                    style={[styles.iconChoice, { backgroundColor: t.bgInput, borderColor: t.border }, editFurnIcon === icon && styles.iconChoiceActive]} 
+                    onPress={() => setEditFurnIcon(icon)}
+                  >
+                    <Text style={{ fontSize: 20 }}>{icon}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={[styles.inputLabel, { color: t.textSub }]}>Wybierz kolor mebla z palety:</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginVertical: 10 }}>
+                {PREDEFINED_COLORS.map(color => (
+                  <TouchableOpacity
+                    key={color}
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 18,
+                      backgroundColor: color,
+                      borderWidth: editFurnColor === color ? 3 : 1,
+                      borderColor: editFurnColor === color ? '#1877f2' : '#ced4da'
+                    }}
+                    onPress={() => setEditFurnColor(color)}
+                  />
+                ))}
+              </View>
+              <View style={[styles.modalActions, { borderTopColor: t.border }]}>
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => setIsEditFurnModalVisible(false)}>
+                  <Text style={[styles.cancelBtnText, { color: t.textSub }]}>Anuluj</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.saveBtn} onPress={handleSaveEditedFurn}>
+                  <Text style={styles.saveBtnText}>Zapisz zmiany</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -2888,8 +3074,12 @@ const styles = StyleSheet.create({
   paintToolsRow: { flexDirection: 'row', gap: 8, paddingVertical: 4 },
   paintToolBadgeWrapper: { flexDirection: 'row', alignItems: 'center', borderRadius: 8, borderWidth: 1.5, overflow: 'hidden' },
   paintToolBadgeContent: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 6, gap: 4 },
+  
+  editBadgeIconBtn: { paddingHorizontal: 6, paddingVertical: 6, backgroundColor: 'rgba(24, 119, 242, 0.15)', borderLeftWidth: 1, borderLeftColor: 'rgba(24, 119, 242, 0.2)' },
+  editBadgeIconBtnText: { fontSize: 11 },
   deleteRoomFromMapBtn: { paddingHorizontal: 6, paddingVertical: 6, backgroundColor: 'rgba(220, 53, 69, 0.15)', borderLeftWidth: 1, borderLeftColor: 'rgba(220, 53, 69, 0.2)' },
   deleteRoomFromMapBtnText: { fontSize: 11 },
+
   paintToolBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1.5, gap: 4 },
   paintToolBadgeActive: { borderWidth: 2.5, borderColor: '#1877f2', elevation: 2 },
   paintToolText: { fontSize: 12, fontWeight: '700' },
