@@ -152,7 +152,6 @@ export default function App() {
   const [authErrorMessage, setAuthErrorMessage] = useState('');
   const [forceUpdate, setForceUpdate] = useState(0);
 
-  // Stany dla resetowania hasła PIN-em
   const [isResetModalVisible, setIsResetModalVisible] = useState(false);
   const [resetUsername, setResetUsername] = useState('');
   const [resetPin, setResetPin] = useState('');
@@ -190,6 +189,12 @@ export default function App() {
   const [isSubGridEditorMode, setIsSubGridEditorMode] = useState(false);
   const [activeSubPaintTool, setActiveSubPaintTool] = useState('furn-zlew');
   const [selectedFurnitureOnMap, setSelectedFurnitureOnMap] = useState(null);
+
+  // Poziom 3: Pudełka / Półki wewnątrz danego mebla
+  const [spotsDefs, setSpotsDefs] = useState({});
+  const [selectedSpotOnMap, setSelectedSpotOnMap] = useState(null);
+  const [isAddSpotModalVisible, setIsAddSpotModalVisible] = useState(false);
+  const [newSpotName, setNewSpotName] = useState('');
 
   const [isAddRoomDefModalVisible, setIsAddRoomDefModalVisible] = useState(false);
   const [newRoomDefName, setNewRoomDefName] = useState('');
@@ -243,7 +248,6 @@ export default function App() {
   const dynamicCellSize = Math.floor((SCREEN_WIDTH - 32 - (GRID_CONTAINER_PADDING * 2)) / gridCols);
   const dynamicSubCellSize = Math.floor((SCREEN_WIDTH - 32 - (GRID_CONTAINER_PADDING * 2)) / subGridCols);
 
-  // Sprawdzanie zapisanej sesji przy starcie
   useEffect(() => {
     const checkSavedSession = async () => {
       try {
@@ -261,7 +265,6 @@ export default function App() {
     checkSavedSession();
   }, []);
 
-  // Pobieranie danych po zalogowaniu
   useEffect(() => {
     if (authToken) {
       fetchItems();
@@ -509,6 +512,11 @@ export default function App() {
         if (response.data.gridCols) setGridCols(response.data.gridCols);
         if (response.data.gridCells) setGridCells(response.data.gridCells);
         if (response.data.roomDefs) setRoomDefs(response.data.roomDefs);
+        if (response.data.subGridRows) setSubGridRows(response.data.subGridRows);
+        if (response.data.subGridCols) setSubGridCols(response.data.subGridCols);
+        if (response.data.subGridDefs) setSubGridDefs(response.data.subGridDefs);
+        if (response.data.subGridCells) setSubGridCells(response.data.subGridCells);
+        if (response.data.spotsDefs) setSpotsDefs(response.data.spotsDefs);
         if (response.data.themeMode) setThemeMode(response.data.themeMode);
         if (response.data.inventoryViewMode) setInventoryViewMode(response.data.inventoryViewMode);
       }
@@ -517,13 +525,18 @@ export default function App() {
     }
   };
 
-  const saveMapConfig = async (newTheme = themeMode, newViewMode = inventoryViewMode) => {
+  const saveMapConfig = async (newTheme = themeMode, newViewMode = inventoryViewMode, overrideSpots = spotsDefs) => {
     try {
       await axios.post(`${BACKEND_URL}/map-config`, {
         gridRows,
         gridCols,
         gridCells,
         roomDefs,
+        subGridRows,
+        subGridCols,
+        subGridDefs,
+        subGridCells,
+        spotsDefs: overrideSpots,
         themeMode: newTheme,
         inventoryViewMode: newViewMode
       }, getAuthHeaders());
@@ -539,6 +552,29 @@ export default function App() {
       showAlert("Sukces", "Plan mieszkania został zapisany w bazie!");
     }
     setIsGridEditorMode(!isGridEditorMode);
+  };
+
+  const handleToggleSubEditorMode = async () => {
+    if (isSubGridEditorMode) {
+      await saveMapConfig(themeMode, inventoryViewMode);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showAlert("Sukces", `Układ pokoju "${insideRoom}" został zapisany w bazie!`);
+    }
+    setIsSubGridEditorMode(!isSubGridEditorMode);
+  };
+
+  const handleAddNewSpot = async () => {
+    if (!newSpotName.trim() || !selectedFurnitureOnMap) return;
+    const spotKey = `${insideRoom}>${selectedFurnitureOnMap}`;
+    const currentList = spotsDefs[spotKey] || [];
+    const updatedSpots = { ...spotsDefs, [spotKey]: [...currentList, newSpotName.trim()] };
+    
+    setSpotsDefs(updatedSpots);
+    setNewSpotName('');
+    setIsAddSpotModalVisible(false);
+    
+    await saveMapConfig(themeMode, inventoryViewMode, updatedSpots);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
   const handleThemeChange = async (mode) => {
@@ -640,6 +676,7 @@ export default function App() {
           setSelectedRoomOnMap(foundDef.name);
           setInsideRoom(null);
           setSelectedFurnitureOnMap(null);
+          setSelectedSpotOnMap(null);
         }
       }
     }
@@ -659,7 +696,10 @@ export default function App() {
       const assignedFurnId = subGridCells[key];
       if (assignedFurnId) {
         const foundFurn = currentFurnDefs.find(fd => fd.id === assignedFurnId);
-        if (foundFurn) setSelectedFurnitureOnMap(foundFurn.name);
+        if (foundFurn) {
+          setSelectedFurnitureOnMap(foundFurn.name);
+          setSelectedSpotOnMap(null);
+        }
       }
     }
   };
@@ -840,7 +880,7 @@ export default function App() {
     setFormCategory(initialData.category || '');
     setFormRoom(initialData.room || loc.room || insideRoom || selectedRoomOnMap || (roomDefs[0]?.name || ''));
     setFormFurniture(initialData.furniture || loc.furniture || selectedFurnitureOnMap || '');
-    setFormSpot(initialData.spot || loc.spot || '');
+    setFormSpot(initialData.spot || loc.spot || selectedSpotOnMap || '');
     setFormQuantity(initialData.quantity ? String(initialData.quantity) : '1');
     setFormUnit(initialData.unit || 'szt');
     setFormHasFillLevel(initialData.hasFill || false);
@@ -1407,7 +1447,7 @@ export default function App() {
             </TouchableOpacity>
           )}
 
-          {/* ==================== MODAL RESETOWANIA HASŁA PIN-EM ==================== */}
+          {/* MODAL RESETOWANIA HASŁA PIN-EM */}
           <Modal visible={isResetModalVisible} animationType="slide" transparent={true}>
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalBackdrop}>
               <View style={[styles.modalContent, { backgroundColor: '#1e293b' }]}>
@@ -1486,7 +1526,7 @@ export default function App() {
               <View>
                 <Text style={[styles.headerTitle, { color: t.textMain }]}>StashBrain</Text>
                 <Text style={[styles.headerSubtitle, { color: t.textSub }]}>
-                  {filteredAndSortedItems.length} {filteredAndSortedItems.length === 1 ? 'produkt' : 'produktów'}[cite: 2]
+                  {filteredAndSortedItems.length} {filteredAndSortedItems.length === 1 ? 'produkt' : 'produktów'}
                 </Text>
               </View>
 
@@ -1877,7 +1917,7 @@ export default function App() {
                           <View style={{ flex: 1 }}>
                             <Text style={[styles.furnitureManagerTitle, { color: t.textMain }]}>🏠 {selectedRoomOnMap}</Text>
                             <Text style={styles.furnitureManagerSub}>
-                              {inStockItems.filter(i => parseLocationHierarchy(i.location).room === selectedRoomOnMap).length} pozycji w tym pokoju[cite: 2]
+                              {inStockItems.filter(i => parseLocationHierarchy(i.location).room === selectedRoomOnMap).length} pozycji w tym pokoju
                             </Text>
                           </View>
                            
@@ -1923,14 +1963,14 @@ export default function App() {
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                   <TouchableOpacity 
                     style={{ backgroundColor: '#64748b', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 }}
-                    onPress={() => { setInsideRoom(null); setSelectedFurnitureOnMap(null); }}
+                    onPress={() => { setInsideRoom(null); setSelectedFurnitureOnMap(null); setSelectedSpotOnMap(null); }}
                   >
                     <Text style={{ color: '#ffffff', fontWeight: '700', fontSize: 13 }}>⬅️ Wróć do mieszkania</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity 
                     style={[styles.editPlanBtn, isSubGridEditorMode && styles.editPlanBtnActive]} 
-                    onPress={() => setIsSubGridEditorMode(!isSubGridEditorMode)}
+                    onPress={handleToggleSubEditorMode}
                   >
                     <Text style={[styles.editPlanBtnText, isSubGridEditorMode && styles.editPlanBtnTextActive]}>
                       {isSubGridEditorMode ? 'Zakończ ✓' : '🛠️ Edytuj układ mebli'}
@@ -2125,31 +2165,80 @@ export default function App() {
                         <View style={{ flex: 1 }}>
                           <Text style={[styles.furnitureManagerTitle, { color: t.textMain }]}>🗄️ {selectedFurnitureOnMap}</Text>
                           <Text style={styles.furnitureManagerSub}>
-                            {inStockItems.filter(i => {
-                              const loc = parseLocationHierarchy(i.location);
-                              return loc.room === insideRoom && loc.furniture === selectedFurnitureOnMap;
-                            }).length} pozycji w tej strefie[cite: 2]
+                            Lokalizacja: {insideRoom} ➔ {selectedFurnitureOnMap}
                           </Text>
                         </View>
                          
                         <TouchableOpacity 
                           style={styles.addSpotBtn} 
-                          onPress={() => handleOpenAddModal({ room: insideRoom, furniture: selectedFurnitureOnMap })}
+                          onPress={() => handleOpenAddModal({ 
+                            room: insideRoom, 
+                            furniture: selectedFurnitureOnMap,
+                            spot: selectedSpotOnMap
+                          })}
                         >
-                          <Text style={styles.addSpotBtnText}>+ Włóż tu produkt</Text>
+                          <Text style={styles.addSpotBtnText}>+ Włóż produkt</Text>
                         </TouchableOpacity>
+                      </View>
+
+                      {/* Poziom 3: Pudełka / Półki w meblu */}
+                      <View style={{ marginBottom: 12 }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                          <Text style={[styles.dimLabel, { color: t.textSub }]}>Półki / Pudełka w tym meblu:</Text>
+                          <TouchableOpacity onPress={() => setIsAddSpotModalVisible(true)}>
+                            <Text style={{ color: '#1877f2', fontWeight: '700', fontSize: 12 }}>+ Dodaj pudełko</Text>
+                          </TouchableOpacity>
+                        </View>
+
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingVertical: 4 }}>
+                          <TouchableOpacity 
+                            style={[
+                              styles.roomSelectPill, 
+                              { backgroundColor: !selectedSpotOnMap ? '#1877f2' : t.bgInput, borderColor: t.border }
+                            ]}
+                            onPress={() => setSelectedSpotOnMap(null)}
+                          >
+                            <Text style={[styles.roomSelectPillText, !selectedSpotOnMap && { color: '#fff', fontWeight: '800' }]}>
+                              Wszystkie części
+                            </Text>
+                          </TouchableOpacity>
+
+                          {((spotsDefs[`${insideRoom}>${selectedFurnitureOnMap}`]) || ['Półka 1', 'Pudełko 1']).map((spot) => {
+                            const isSpotActive = selectedSpotOnMap === spot;
+                            return (
+                              <TouchableOpacity 
+                                key={spot} 
+                                style={[
+                                  styles.roomSelectPill, 
+                                  { backgroundColor: isSpotActive ? '#059669' : t.bgInput, borderColor: isSpotActive ? '#059669' : t.border }
+                                ]}
+                                onPress={() => setSelectedSpotOnMap(isSpotActive ? null : spot)}
+                              >
+                                <Text style={{ fontSize: 12 }}>📦</Text>
+                                <Text style={[styles.roomSelectPillText, isSpotActive && { color: '#fff', fontWeight: '800' }]}>
+                                  {spot}
+                                </Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </ScrollView>
                       </View>
 
                       {(() => {
                         const furnItems = inStockItems.filter(i => {
                           const loc = parseLocationHierarchy(i.location);
-                          return loc.room === insideRoom && loc.furniture === selectedFurnitureOnMap;
+                          const matchBase = loc.room === insideRoom && loc.furniture === selectedFurnitureOnMap;
+                          if (!matchBase) return false;
+                          if (selectedSpotOnMap) return loc.spot === selectedSpotOnMap;
+                          return true;
                         });
 
                         if (furnItems.length === 0) {
                           return (
                             <View style={styles.emptySpotContainer}>
-                              <Text style={[styles.emptySpotText, { color: t.emptyText }]}>Ten mebel jest pusty.</Text>
+                              <Text style={[styles.emptySpotText, { color: t.emptyText }]}>
+                                {selectedSpotOnMap ? `Brak rzeczy w "${selectedSpotOnMap}".` : 'Ten mebel jest pusty.'}
+                              </Text>
                             </View>
                           );
                         }
@@ -2346,7 +2435,7 @@ export default function App() {
               <View style={[styles.settingsCard, { backgroundColor: t.bgCard, borderColor: t.border }]}>
                 <Text style={[styles.settingsCardTitle, { color: t.textMain }]}>Hubercik Developer</Text>
                 <Text style={[styles.settingsCardSub, { color: t.textSub, marginTop: 8, lineHeight: 20 }]}>
-                  Autorem tego softu jest Hubercik – człowiek, dla którego bałagan jest stanem naturalnym, a moją główną życiową pasją jest gubienie rzeczy, o których istnieniu zapomniałem minutę po ich odłożeniu. Aplikacja powstała, bo mój mózg z ADHD wygenerował już tyle chaosu, że bez tego systemu prawdopodobnie szukałbym własnej lewej stopy przez trzy dni. Jeśli działa – ciesz się. Jeśli nie działa – cóż, przynajmniej jest estetycznie.[cite: 2]
+                  Autorem tego softu jest Hubercik – człowiek, dla którego bałagan jest stanem naturalnym, a moją główną życiową pasją jest gubienie rzeczy, o których istnieniu zapomniałem minutę po ich odłożeniu. Aplikacja powstała, bo mój mózg z ADHD wygenerował już tyle chaosu, że bez tego systemu prawdopodobnie szukałbym własnej lewej stopy przez trzy dni. Jeśli działa – ciesz się. Jeśli nie działa – cóż, przynajmniej jest estetycznie.
                 </Text>
               </View>
             </ScrollView>
@@ -2493,6 +2582,32 @@ export default function App() {
           </KeyboardAvoidingView>
         </Modal>
 
+        {/* ==================== MODAL DODAWANIA PUDEŁKA / PÓŁKI ==================== */}
+        <Modal visible={isAddSpotModalVisible} animationType="slide" transparent={true}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalBackdrop}>
+            <View style={[styles.modalContent, { backgroundColor: t.bgCard }]}>
+              <Text style={[styles.modalTitle, { color: t.textMain }]}>Dodaj pudełko / półkę</Text>
+              <Text style={[styles.inputLabel, { color: t.textSub }]}>Nazwa (np. Pudełko 1, Koszyk z kablami, Półka górna):</Text>
+              <TextInput 
+                style={[styles.modalInput, { backgroundColor: t.bgInput, color: t.textMain }]} 
+                placeholder="np. Pudełko 1" 
+                placeholderTextColor={t.emptyText}
+                value={newSpotName} 
+                onChangeText={setNewSpotName} 
+                autoFocus
+              />
+              <View style={[styles.modalActions, { borderTopColor: t.border }]}>
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => setIsAddSpotModalVisible(false)}>
+                  <Text style={[styles.cancelBtnText, { color: t.textSub }]}>Anuluj</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.saveBtn} onPress={handleAddNewSpot}>
+                  <Text style={styles.saveBtnText}>Dodaj</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
+
         {/* ==================== MODAL FORMULARZA PRODUKTU ==================== */}
         <Modal visible={modalVisible} animationType="slide" transparent={true}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalBackdrop}>
@@ -2539,7 +2654,7 @@ export default function App() {
                   </View>
                   <View style={{ flex: 1, marginLeft: 6 }}>
                     <Text style={[styles.inputLabelSmall, { color: t.textSub }]}>Półka / Pudełko</Text>
-                    <TextInput style={[styles.modalInputSmall, { backgroundColor: t.bgInput, color: t.textMain }]} placeholder="np. Półka 1" placeholderTextColor={t.emptyText} value={formSpot} onChangeText={setFormSpot} />
+                    <TextInput style={[styles.modalInputSmall, { backgroundColor: t.bgInput, color: t.textMain }]} placeholder="np. Pudełko 1" placeholderTextColor={t.emptyText} value={formSpot} onChangeText={setFormSpot} />
                   </View>
                 </View>
 
