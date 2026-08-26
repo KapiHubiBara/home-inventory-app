@@ -119,19 +119,6 @@ const INITIAL_ROOM_FURNITURE_DEFS = {
   ]
 };
 
-const generateInitialSubGridCells = (rows, cols) => {
-  const cells = {};
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      if (r < 3 && c < 3) cells[`${r}-${c}`] = 'furn-zlew';
-      else if (r < 3 && c >= 3) cells[`${r}-${c}`] = 'furn-szafka1';
-      else if (r >= 3) cells[`${r}-${c}`] = 'furn-lodowka';
-      else cells[`${r}-${c}`] = null;
-    }
-  }
-  return cells;
-};
-
 const PREDEFINED_COLORS = [
   '#ff8787', '#ffc9c9', '#ff922b', '#ffd8a8', '#fcc419', '#ffe066', 
   '#51cf66', '#c3fae8', '#339af0', '#a5d8ff', '#845ef7', '#d0bfff', 
@@ -181,10 +168,10 @@ export default function App() {
   const [selectedRoomOnMap, setSelectedRoomOnMap] = useState('Salon / Biuro');
 
   const [insideRoom, setInsideRoom] = useState(null);
-  const [subGridRows, setSubGridRows] = useState(6);
-  const [subGridCols, setSubGridCols] = useState(8);
+  const [subGridRowsMap, setSubGridRowsMap] = useState({});
+  const [subGridColsMap, setSubGridColsMap] = useState({});
   const [subGridDefs, setSubGridDefs] = useState(INITIAL_ROOM_FURNITURE_DEFS);
-  const [subGridCells, setSubGridCells] = useState(() => generateInitialSubGridCells(6, 8));
+  const [subGridCells, setSubGridCells] = useState({}); // { [roomName]: { "r-c": furnId } }
   const [isSubGridEditorMode, setIsSubGridEditorMode] = useState(false);
   const [activeSubPaintTool, setActiveSubPaintTool] = useState('furn-zlew');
   const [selectedFurnitureOnMap, setSelectedFurnitureOnMap] = useState(null);
@@ -254,6 +241,10 @@ export default function App() {
     return () => subscription?.remove();
   }, []);
 
+  const currentSubRows = (insideRoom && subGridRowsMap[insideRoom]) || 6;
+  const currentSubCols = (insideRoom && subGridColsMap[insideRoom]) || 8;
+  const currentRoomCells = (insideRoom && subGridCells[insideRoom]) || {};
+
   const availableWidth = Math.min(windowDimensions.width - 48, 1100);
   const availableHeight = windowDimensions.height - (isGridEditorMode || isSubGridEditorMode ? 340 : 270);
 
@@ -269,8 +260,8 @@ export default function App() {
   const dynamicSubCellSize = Math.max(
     20, 
     Math.min(
-      Math.floor((availableWidth - (GRID_CONTAINER_PADDING * 2)) / subGridCols),
-      Math.floor((availableHeight - (GRID_CONTAINER_PADDING * 2)) / subGridRows),
+      Math.floor((availableWidth - (GRID_CONTAINER_PADDING * 2)) / currentSubCols),
+      Math.floor((availableHeight - (GRID_CONTAINER_PADDING * 2)) / currentSubRows),
       56
     )
   );
@@ -457,15 +448,20 @@ export default function App() {
     PanResponder.create({
       onStartShouldSetPanResponder: () => isSubGridEditorMode,
       onPanResponderMove: (evt) => {
+        if (!insideRoom) return;
         const { locationX, locationY } = evt.nativeEvent;
         const c = Math.floor(locationX / dynamicSubCellSize);
         const r = Math.floor(locationY / dynamicSubCellSize);
-        if (r >= 0 && r < subGridRows && c >= 0 && c < subGridCols) {
+        if (r >= 0 && r < currentSubRows && c >= 0 && c < currentSubCols) {
           const key = `${r}-${c}`;
-          if (subGridCells[key] !== activeSubPaintTool) {
+          const currentRoomGrid = subGridCells[insideRoom] || {};
+          if (currentRoomGrid[key] !== activeSubPaintTool) {
             setSubGridCells(prev => ({
               ...prev,
-              [key]: activeSubPaintTool === 'eraser' ? null : activeSubPaintTool
+              [insideRoom]: {
+                ...(prev[insideRoom] || {}),
+                [key]: activeSubPaintTool === 'eraser' ? null : activeSubPaintTool
+              }
             }));
           }
         }
@@ -497,11 +493,13 @@ export default function App() {
   };
 
   const getFurnBoundingBox = (furnId) => {
+    if (!insideRoom) return null;
+    const roomCells = subGridCells[insideRoom] || {};
     let minR = Infinity, maxR = -1, minC = Infinity, maxC = -1;
     let count = 0;
-    for (let r = 0; r < subGridRows; r++) {
-      for (let c = 0; c < subGridCols; c++) {
-        if (subGridCells[`${r}-${c}`] === furnId) {
+    for (let r = 0; r < currentSubRows; r++) {
+      for (let c = 0; c < currentSubCols; c++) {
+        if (roomCells[`${r}-${c}`] === furnId) {
           if (r < minR) minR = r;
           if (r > maxR) maxR = r;
           if (c < minC) minC = c;
@@ -539,8 +537,8 @@ export default function App() {
         if (response.data.gridCols) setGridCols(response.data.gridCols);
         if (response.data.gridCells) setGridCells(response.data.gridCells);
         if (response.data.roomDefs) setRoomDefs(response.data.roomDefs);
-        if (response.data.subGridRows) setSubGridRows(response.data.subGridRows);
-        if (response.data.subGridCols) setSubGridCols(response.data.subGridCols);
+        if (response.data.subGridRowsMap) setSubGridRowsMap(response.data.subGridRowsMap);
+        if (response.data.subGridColsMap) setSubGridColsMap(response.data.subGridColsMap);
         if (response.data.subGridDefs) setSubGridDefs(response.data.subGridDefs);
         if (response.data.subGridCells) setSubGridCells(response.data.subGridCells);
         if (response.data.spotsDefs) setSpotsDefs(response.data.spotsDefs);
@@ -552,17 +550,25 @@ export default function App() {
     }
   };
 
-  const saveMapConfig = async (newTheme = themeMode, newViewMode = inventoryViewMode, overrideSpots = spotsDefs) => {
+  const saveMapConfig = async (
+    newTheme = themeMode, 
+    newViewMode = inventoryViewMode, 
+    overrideSpots = spotsDefs,
+    overrideSubCells = subGridCells,
+    overrideSubDefs = subGridDefs,
+    overrideSubRows = subGridRowsMap,
+    overrideSubCols = subGridColsMap
+  ) => {
     try {
       await axios.post(`${BACKEND_URL}/map-config`, {
         gridRows,
         gridCols,
         gridCells,
         roomDefs,
-        subGridRows,
-        subGridCols,
-        subGridDefs,
-        subGridCells,
+        subGridRowsMap: overrideSubRows,
+        subGridColsMap: overrideSubCols,
+        subGridDefs: overrideSubDefs,
+        subGridCells: overrideSubCells,
         spotsDefs: overrideSpots,
         themeMode: newTheme,
         inventoryViewMode: newViewMode
@@ -583,7 +589,7 @@ export default function App() {
 
   const handleToggleSubEditorMode = async () => {
     if (isSubGridEditorMode) {
-      await saveMapConfig(themeMode, inventoryViewMode);
+      await saveMapConfig(themeMode, inventoryViewMode, spotsDefs, subGridCells, subGridDefs, subGridRowsMap, subGridColsMap);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showAlert("Sukces", `Układ pokoju "${insideRoom}" został zapisany w bazie!`);
     }
@@ -591,7 +597,7 @@ export default function App() {
   };
 
   const handleAddNewSpot = async () => {
-    if (!newSpotName.trim() || !selectedFurnitureOnMap) return;
+    if (!newSpotName.trim() || !selectedFurnitureOnMap || !insideRoom) return;
     const spotKey = `${insideRoom}>${selectedFurnitureOnMap}`;
     const currentList = spotsDefs[spotKey] || [];
     const updatedSpots = { ...spotsDefs, [spotKey]: [...currentList, newSpotName.trim()] };
@@ -710,17 +716,22 @@ export default function App() {
   };
 
   const handleSubCellClick = (r, c) => {
+    if (!insideRoom) return;
     const key = `${r}-${c}`;
     const currentFurnDefs = subGridDefs[insideRoom] || [];
+    const roomCells = subGridCells[insideRoom] || {};
 
     if (isSubGridEditorMode) {
       Haptics.selectionAsync();
       setSubGridCells(prev => ({
         ...prev,
-        [key]: activeSubPaintTool === 'eraser' ? null : activeSubPaintTool
+        [insideRoom]: {
+          ...(prev[insideRoom] || {}),
+          [key]: activeSubPaintTool === 'eraser' ? null : activeSubPaintTool
+        }
       }));
     } else {
-      const assignedFurnId = subGridCells[key];
+      const assignedFurnId = roomCells[key];
       if (assignedFurnId) {
         const foundFurn = currentFurnDefs.find(fd => fd.id === assignedFurnId);
         if (foundFurn) {
@@ -755,11 +766,12 @@ export default function App() {
   };
 
   const handleChangeSubGridDimension = (dimension, delta) => {
+    if (!insideRoom) return;
     Haptics.selectionAsync();
     if (dimension === 'rows') {
-      setSubGridRows(prev => Math.max(4, Math.min(16, prev + delta)));
+      setSubGridRowsMap(prev => ({ ...prev, [insideRoom]: Math.max(4, Math.min(16, ((prev[insideRoom] || 6) + delta))) }));
     } else {
-      setSubGridCols(prev => Math.max(4, Math.min(16, prev + delta)));
+      setSubGridColsMap(prev => ({ ...prev, [insideRoom]: Math.max(4, Math.min(16, ((prev[insideRoom] || 8) + delta))) }));
     }
   };
 
@@ -789,13 +801,14 @@ export default function App() {
   };
 
   const handleDeleteWholeFurniture = (furnDef) => {
+    if (!insideRoom) return;
     const deleteAction = () => {
       setSubGridCells(prev => {
-        const updated = { ...prev };
-        Object.keys(updated).forEach(k => {
-          if (updated[k] === furnDef.id) updated[k] = null;
+        const roomCells = { ...(prev[insideRoom] || {}) };
+        Object.keys(roomCells).forEach(k => {
+          if (roomCells[k] === furnDef.id) roomCells[k] = null;
         });
-        return updated;
+        return { ...prev, [insideRoom]: roomCells };
       });
       setSubGridDefs(prev => {
         const list = prev[insideRoom] || [];
@@ -840,14 +853,15 @@ export default function App() {
   };
 
   const handleClearWholeSubGrid = () => {
+    if (!insideRoom) return;
     const clearAction = () => {
       const empty = {};
-      for (let r = 0; r < subGridRows; r++) {
-        for (let c = 0; c < subGridCols; c++) {
+      for (let r = 0; r < currentSubRows; r++) {
+        for (let c = 0; c < currentSubCols; c++) {
           empty[`${r}-${c}`] = null;
         }
       }
-      setSubGridCells(empty);
+      setSubGridCells(prev => ({ ...prev, [insideRoom]: empty }));
     };
 
     if (Platform.OS === 'web') {
@@ -888,13 +902,15 @@ export default function App() {
       border: '#74c0fc',
       textColor: '#1c7ed6'
     };
-    setSubGridDefs(prev => {
-      const currentList = prev[insideRoom] || [];
-      return { ...prev, [insideRoom]: [...currentList, newDef] };
-    });
+    const updatedDefs = {
+      ...subGridDefs,
+      [insideRoom]: [...(subGridDefs[insideRoom] || []), newDef]
+    };
+    setSubGridDefs(updatedDefs);
     setActiveSubPaintTool(newDef.id);
     setIsAddFurnDefModalVisible(false);
     setNewFurnDefName('');
+    saveMapConfig(themeMode, inventoryViewMode, spotsDefs, subGridCells, updatedDefs, subGridRowsMap, subGridColsMap);
   };
 
   const handleOpenAddModal = (initialData = {}) => {
@@ -1987,7 +2003,7 @@ export default function App() {
 
             {insideRoom && (
               <ScrollView contentContainerStyle={styles.svgScrollContainer}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, width: '100%', maxWidth: 1100 }}>
                   <TouchableOpacity 
                     style={{ backgroundColor: '#64748b', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 }}
                     onPress={() => { setInsideRoom(null); setSelectedFurnitureOnMap(null); setSelectedSpotOnMap(null); }}
@@ -2007,11 +2023,11 @@ export default function App() {
 
                 {isSubGridEditorMode && (
                   <View style={[styles.dimensionManagerCard, { backgroundColor: t.bgCard, borderColor: t.border }]}>
-                    <Text style={[styles.dimensionManagerTitle, { color: t.textMain }]}>📐 Dopasuj rozmiar wnętrza pokoju:</Text>
+                    <Text style={[styles.dimensionManagerTitle, { color: t.textMain }]}>📐 Dopasuj rozmiar wnętrza pokoju ({insideRoom}):</Text>
                      
                     <View style={styles.dimensionControlsRow}>
                       <View style={styles.dimControlGroup}>
-                        <Text style={[styles.dimLabel, { color: t.textSub }]}>Wysokość ({subGridRows}):</Text>
+                        <Text style={[styles.dimLabel, { color: t.textSub }]}>Wysokość ({currentSubRows}):</Text>
                         <View style={styles.dimBtnGroup}>
                           <TouchableOpacity style={[styles.dimBtn, { backgroundColor: t.bgInput, borderColor: t.border }]} onPress={() => handleChangeSubGridDimension('rows', -1)}>
                             <Text style={[styles.dimBtnText, { color: t.textMain }]}>−</Text>
@@ -2023,7 +2039,7 @@ export default function App() {
                       </View>
 
                       <View style={styles.dimControlGroup}>
-                        <Text style={[styles.dimLabel, { color: t.textSub }]}>Szerokość ({subGridCols}):</Text>
+                        <Text style={[styles.dimLabel, { color: t.textSub }]}>Szerokość ({currentSubCols}):</Text>
                         <View style={styles.dimBtnGroup}>
                           <TouchableOpacity style={[styles.dimBtn, { backgroundColor: t.bgInput, borderColor: t.border }]} onPress={() => handleChangeSubGridDimension('cols', -1)}>
                             <Text style={[styles.dimBtnText, { color: t.textMain }]}>−</Text>
@@ -2043,20 +2059,20 @@ export default function App() {
 
                 <View style={[styles.gridBoardWrapper, { backgroundColor: t.bgCard, borderColor: t.border }]}>
                   <View style={[styles.gridBoard, { position: 'relative' }]} {...subGridPanResponder.panHandlers}>
-                    {Array.from({ length: subGridRows }).map((_, r) => (
+                    {Array.from({ length: currentSubRows }).map((_, r) => (
                       <View key={`sub-row-${r}`} style={styles.gridRow}>
-                        {Array.from({ length: subGridCols }).map((_, c) => {
+                        {Array.from({ length: currentSubCols }).map((_, c) => {
                           const cellKey = `${r}-${c}`;
-                          const furnId = subGridCells[cellKey];
+                          const furnId = currentRoomCells[cellKey];
                           const currentFurnDefs = subGridDefs[insideRoom] || [];
                           const furnDef = currentFurnDefs.find(fd => fd.id === furnId);
 
                           const isSelected = selectedFurnitureOnMap === furnDef?.name && !isSubGridEditorMode;
                            
-                          const topSame = r > 0 && subGridCells[`${r-1}-${c}`] === furnId;
-                          const bottomSame = r < subGridRows - 1 && subGridCells[`${r+1}-${c}`] === furnId;
-                          const leftSame = c > 0 && subGridCells[`${r}-${c-1}`] === furnId;
-                          const rightSame = c < subGridCols - 1 && subGridCells[`${r}-${c+1}`] === furnId;
+                          const topSame = r > 0 && currentRoomCells[`${r-1}-${c}`] === furnId;
+                          const bottomSame = r < currentSubRows - 1 && currentRoomCells[`${r+1}-${c}`] === furnId;
+                          const leftSame = c > 0 && currentRoomCells[`${r}-${c-1}`] === furnId;
+                          const rightSame = c < currentSubCols - 1 && currentRoomCells[`${r}-${c+1}`] === furnId;
 
                           const isFurnBorder = furnDef && (!topSame || !bottomSame || !leftSame || !rightSame);
 
@@ -2136,7 +2152,7 @@ export default function App() {
                 {isSubGridEditorMode ? (
                   <View style={[styles.paintPaletteCard, { backgroundColor: t.bgCard, borderColor: t.border }]}>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                      <Text style={[styles.paintPaletteTitle, { color: t.textMain }]}>Meble / Strefy w pokoju:</Text>
+                      <Text style={[styles.paintPaletteTitle, { color: t.textMain }]}>Meble / Strefy w pokoju ({insideRoom}):</Text>
                       <TouchableOpacity onPress={() => setIsAddFurnDefModalVisible(true)}>
                         <Text style={styles.addRoomDefBtnText}>+ Nowy mebel</Text>
                       </TouchableOpacity>
