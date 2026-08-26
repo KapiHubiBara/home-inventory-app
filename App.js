@@ -142,6 +142,7 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState('inventory');
   const [inventoryViewMode, setInventoryViewMode] = useState('list');
+  const [inventorySortMode, setInventorySortMode] = useState('expiry'); // 'expiry', 'name', 'newest'
   const [expandedNodes, setExpandedNodes] = useState({});
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -219,6 +220,7 @@ export default function App() {
   const [formUnit, setFormUnit] = useState('szt');
   const [formHasFillLevel, setFormHasFillLevel] = useState(false);
   const [formFillLevel, setFormFillLevel] = useState(100);
+  const [formUserNotes, setFormUserNotes] = useState('');
   const [formExpiry, setFormExpiry] = useState('');
   const [formImageUrl, setFormImageUrl] = useState('');
 
@@ -663,14 +665,17 @@ export default function App() {
   };
 
   const parseItemNotes = (notes) => {
-    if (!notes) return { hasFill: false, fillLevel: 100 };
-    const hasFill = notes.includes('tracking:fill');
+    if (!notes) return { hasFill: false, fillLevel: 100, userNotes: '' };
+    const parts = notes.split(' | ');
+    const trackingPart = parts[0] || '';
+    const userNotes = parts[1] || '';
+    const hasFill = trackingPart.includes('tracking:fill');
     let fillLevel = 100;
-    if (notes.includes('fill:')) {
-      const match = notes.match(/fill:(\d+)/);
+    if (trackingPart.includes('fill:')) {
+      const match = trackingPart.match(/fill:(\d+)/);
       if (match) fillLevel = parseInt(match[1]);
     }
-    return { hasFill, fillLevel };
+    return { hasFill, fillLevel, userNotes };
   };
 
   const getExpiryStatus = (dateString) => {
@@ -1059,6 +1064,7 @@ export default function App() {
     setFormUnit(initialData.unit || 'szt');
     setFormHasFillLevel(initialData.hasFill || false);
     setFormFillLevel(initialData.fillLevel || 100);
+    setFormUserNotes('');
     setFormExpiry(initialData.expiry_date || '');
     setFormImageUrl(initialData.image_url || '');
     setModalVisible(true);
@@ -1077,9 +1083,10 @@ export default function App() {
     setFormSpot(loc.spot || '');
     setFormQuantity(item.quantity !== undefined ? String(item.quantity) : '1');
     setFormUnit(item.unit || 'szt');
-    const { hasFill, fillLevel } = parseItemNotes(item.notes);
+    const { hasFill, fillLevel, userNotes } = parseItemNotes(item.notes);
     setFormHasFillLevel(hasFill);
     setFormFillLevel(fillLevel);
+    setFormUserNotes(userNotes);
     setFormExpiry(item.expiry_date || '');
     setFormImageUrl(item.image_url || '');
     setModalVisible(true);
@@ -1089,7 +1096,7 @@ export default function App() {
     if (isCustom) {
       handleOpenAddModal({ name: item.name });
     } else {
-      const { hasFill } = parseItemNotes(item.notes);
+      const { hasFill, userNotes } = parseItemNotes(item.notes);
       const loc = parseLocationHierarchy(item.location);
       setIsEditing(true);
       setEditingId(item.id);
@@ -1104,6 +1111,7 @@ export default function App() {
       setFormUnit(item.unit || 'szt');
       setFormHasFillLevel(hasFill);
       setFormFillLevel(100);
+      setFormUserNotes(userNotes);
       setFormExpiry('');
       setFormImageUrl(item.image_url || '');
       setModalVisible(true);
@@ -1123,7 +1131,8 @@ export default function App() {
 
     const qty = parseFloat(formQuantity) || 0.0;
     const isOutOfStock = qty === 0 || (formHasFillLevel && formFillLevel === 0 && qty <= 1);
-    const notesPayload = formHasFillLevel ? `tracking:fill,fill:${formFillLevel}` : 'tracking:qty';
+    const trackingPayload = formHasFillLevel ? `tracking:fill,fill:${formFillLevel}` : 'tracking:qty';
+    const notesPayload = formUserNotes.trim() ? `${trackingPayload} | ${formUserNotes.trim()}` : trackingPayload;
 
     const locParts = [formRoom.trim()];
     if (formFurniture.trim()) locParts.push(formFurniture.trim());
@@ -1160,6 +1169,59 @@ export default function App() {
       }
       setModalVisible(false);
       fetchItems();
+    } catch (error) {
+      showAlert('Błąd zapisu', JSON.stringify(error.response?.data?.detail) || error.message);
+    }
+  };
+
+  const handleSaveAndAddAnother = async () => {
+    if (!formName.trim()) {
+      showAlert('Błąd', 'Nazwa produktu jest wymagana.');
+      return;
+    }
+    if (!formRoom.trim()) {
+      showAlert('Wskaż pokój! 🗺️', 'Wybierz pokój na siatce mieszkania.');
+      return;
+    }
+    const qty = parseFloat(formQuantity) || 0.0;
+    const isOutOfStock = qty === 0 || (formHasFillLevel && formFillLevel === 0 && qty <= 1);
+    const trackingPayload = formHasFillLevel ? `tracking:fill,fill:${formFillLevel}` : 'tracking:qty';
+    const notesPayload = formUserNotes.trim() ? `${trackingPayload} | ${formUserNotes.trim()}` : trackingPayload;
+
+    const locParts = [formRoom.trim()];
+    if (formFurniture.trim()) locParts.push(formFurniture.trim());
+    if (formSpot.trim()) locParts.push(formSpot.trim());
+    const finalLocation = locParts.join(' > ');
+
+    const payload = {
+      name: formName.trim(),
+      barcode: null,
+      brand: formBrand.trim() || null,
+      quantity: qty,
+      unit: formUnit.trim() || 'szt',
+      location: finalLocation,
+      category: formCategory.trim() || 'inne',
+      status: isOutOfStock ? 'zużyte' : 'w_magazynie',
+      expiry_date: formExpiry.trim() || null,
+      notes: notesPayload,
+      image_url: null
+    };
+
+    try {
+      const response = await axios.post(`${BACKEND_URL}/items`, payload, getAuthHeaders());
+      const newId = response.data?.item?.id;
+      if (newId) setNewlyAddedItemIds(prev => [...new Set([...prev, newId])]);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      
+      // Reset podstawowych pól zachowując lokalizację i kategorię
+      setFormName('');
+      setFormBrand('');
+      setFormBarcode('');
+      setFormQuantity('1');
+      setFormUserNotes('');
+      setFormExpiry('');
+      fetchItems();
+      showAlert("Zapisano!", `Dodano "${payload.name}" do magazynu. Możesz dodać kolejny produkt.`);
     } catch (error) {
       showAlert('Błąd zapisu', JSON.stringify(error.response?.data?.detail) || error.message);
     }
@@ -1205,7 +1267,10 @@ export default function App() {
       }
     }
 
-    const newNotes = `tracking:fill,fill:${finalFillLevel}`;
+    const { userNotes } = parseItemNotes(item.notes);
+    const trackingPayload = `tracking:fill,fill:${finalFillLevel}`;
+    const newNotes = userNotes ? `${trackingPayload} | ${userNotes}` : trackingPayload;
+
     setItems(prev => prev.map(i => (i.id === item.id ? { ...i, quantity: newQty, notes: newNotes, status: newStatus } : i)));
 
     try {
@@ -1232,11 +1297,12 @@ export default function App() {
     Haptics.selectionAsync();
     const currentQty = typeof item.quantity === 'number' ? item.quantity : (parseFloat(item.quantity) || 0);
     const newQty = Math.max(0, currentQty + delta);
-    const { hasFill } = parseItemNotes(item.notes);
+    const { hasFill, userNotes } = parseItemNotes(item.notes);
 
-    const notesPayload = hasFill 
-      ? (newQty > 0 && currentQty === 0 ? 'tracking:fill,fill:100' : item.notes)
+    const trackingPayload = hasFill 
+      ? (newQty > 0 && currentQty === 0 ? 'tracking:fill,fill:100' : (item.notes.split(' | ')[0] || 'tracking:fill,fill:100'))
       : 'tracking:qty';
+    const notesPayload = userNotes ? `${trackingPayload} | ${userNotes}` : trackingPayload;
 
     setItems(prev => prev.map(i => (i.id === item.id ? { ...i, quantity: newQty, notes: notesPayload } : i)));
 
@@ -1376,6 +1442,13 @@ export default function App() {
       return matchesSearch && matchesRoom && matchesExpiry;
     })
     .sort((a, b) => {
+      if (inventorySortMode === 'name') {
+        return (a.name || '').localeCompare(b.name || '');
+      }
+      if (inventorySortMode === 'newest') {
+        return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+      }
+      // Domyślnie 'expiry'
       const statusA = getExpiryStatus(a.expiry_date);
       const statusB = getExpiryStatus(b.expiry_date);
       return (statusA ? statusA.diffDays : Infinity) - (statusB ? statusB.diffDays : Infinity);
@@ -1410,7 +1483,7 @@ export default function App() {
 
   const renderItemCard = (item) => {
     const expiryStatus = getExpiryStatus(item.expiry_date);
-    const { hasFill, fillLevel } = parseItemNotes(item.notes);
+    const { hasFill, fillLevel, userNotes } = parseItemNotes(item.notes);
     const isNew = newlyAddedItemIds.includes(item.id);
 
     return (
@@ -1454,6 +1527,12 @@ export default function App() {
             </View>
           ) : null}
         </View>
+
+        {userNotes ? (
+          <View style={{ marginTop: 6, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: t.bgInput, borderRadius: 6 }}>
+            <Text style={{ fontSize: 12, color: t.textSub }}>💬 {userNotes}</Text>
+          </View>
+        ) : null}
 
         {expiryStatus ? (
           <View style={[styles.expiryBadge, { backgroundColor: expiryStatus.bg, borderColor: expiryStatus.border }]}>
@@ -1747,7 +1826,34 @@ export default function App() {
               />
             </View>
 
+            {/* Pasek sortowania i filtrowania */}
             <View style={[styles.categoriesWrapper, { backgroundColor: t.bgApp, borderBottomColor: t.border }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 6, gap: 6 }}>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: t.textSub }}>Sortowanie:</Text>
+                {[
+                  { key: 'expiry', label: '⏳ Termin' },
+                  { key: 'name', label: '🔤 Nazwa A-Z' },
+                  { key: 'newest', label: '✨ Najnowsze' }
+                ].map(s => (
+                  <TouchableOpacity
+                    key={s.key}
+                    style={{
+                      paddingHorizontal: 8,
+                      paddingVertical: 3,
+                      borderRadius: 12,
+                      backgroundColor: inventorySortMode === s.key ? '#1877f2' : t.bgInput,
+                      borderWidth: 1,
+                      borderColor: inventorySortMode === s.key ? '#0d6efd' : t.border
+                    }}
+                    onPress={() => { Haptics.selectionAsync(); setInventorySortMode(s.key); }}
+                  >
+                    <Text style={{ fontSize: 11, fontWeight: inventorySortMode === s.key ? '800' : '600', color: inventorySortMode === s.key ? '#fff' : t.textSub }}>
+                      {s.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoriesContainer}>
                 {availableRooms.map((room) => (
                   <TouchableOpacity 
@@ -2893,7 +2999,18 @@ export default function App() {
         <Modal visible={modalVisible} animationType="slide" transparent={true}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalBackdrop}>
             <View style={[styles.modalContent, { backgroundColor: t.bgCard }]}>
-              <Text style={[styles.modalTitle, { color: t.textMain }]}>{isEditing ? 'Edytuj / Odłóż produkt' : 'Nowy produkt'}</Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <Text style={[styles.modalTitle, { color: t.textMain }]}>{isEditing ? 'Edytuj / Odłóż produkt' : 'Nowy produkt'}</Text>
+                {!isEditing && (
+                  <TouchableOpacity 
+                    style={{ backgroundColor: '#059669', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 }}
+                    disabled={!isFormValid}
+                    onPress={handleSaveAndAddAnother}
+                  >
+                    <Text style={{ color: '#fff', fontWeight: '800', fontSize: 12 }}>⚡ Zapisz i dodaj kolejne</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
                
               <ScrollView showsVerticalScrollIndicator={false}>
                 <Text style={[styles.inputLabel, { color: t.textSub }]}>Nazwa produktu *</Text>
@@ -3068,6 +3185,10 @@ export default function App() {
                     <TextInput style={[styles.modalInput, { backgroundColor: t.bgInput, color: t.textMain, marginTop: 4 }]} placeholder="szt / butelka" placeholderTextColor={t.emptyText} value={formUnit} onChangeText={setFormUnit} />
                   </View>
                 </View>
+
+                {/* Pole Notatki / Opis */}
+                <Text style={[styles.inputLabel, { color: t.textSub }]}>Notatki / Opis (opcjonalnie)</Text>
+                <TextInput style={[styles.modalInput, { backgroundColor: t.bgInput, color: t.textMain }]} placeholder="np. zapasowy, kupiony na promocji..." placeholderTextColor={t.emptyText} value={formUserNotes} onChangeText={setFormUserNotes} />
 
                 <View style={[styles.trackingToggleContainer, { backgroundColor: t.bgInput }]}>
                   <View style={{ flex: 1, paddingRight: 10 }}>
