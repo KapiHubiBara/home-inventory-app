@@ -25,7 +25,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 
 const BACKEND_URL = 'https://home-inventory-backend-nfun.onrender.com';
-const SCREEN_WIDTH = Dimensions.get('window').width;
 const GRID_CONTAINER_PADDING = 10;
 
 const showAlert = (title, message) => {
@@ -245,8 +244,36 @@ export default function App() {
     '⚪ Brak daty'
   ];
 
-  const dynamicCellSize = Math.floor((SCREEN_WIDTH - 32 - (GRID_CONTAINER_PADDING * 2)) / gridCols);
-  const dynamicSubCellSize = Math.floor((SCREEN_WIDTH - 32 - (GRID_CONTAINER_PADDING * 2)) / subGridCols);
+  // ==================== RESPONSYWNE SKALOWANIE MAPY DO OKNA ====================
+  const [windowDimensions, setWindowDimensions] = useState(Dimensions.get('window'));
+
+  useEffect(() => {
+    const subscription = Dimensions.addEventListener('change', ({ window }) => {
+      setWindowDimensions(window);
+    });
+    return () => subscription?.remove();
+  }, []);
+
+  const availableWidth = Math.min(windowDimensions.width - 48, 1100);
+  const availableHeight = windowDimensions.height - (isGridEditorMode || isSubGridEditorMode ? 340 : 270);
+
+  const dynamicCellSize = Math.max(
+    16, 
+    Math.min(
+      Math.floor((availableWidth - (GRID_CONTAINER_PADDING * 2)) / gridCols),
+      Math.floor((availableHeight - (GRID_CONTAINER_PADDING * 2)) / gridRows),
+      48
+    )
+  );
+
+  const dynamicSubCellSize = Math.max(
+    20, 
+    Math.min(
+      Math.floor((availableWidth - (GRID_CONTAINER_PADDING * 2)) / subGridCols),
+      Math.floor((availableHeight - (GRID_CONTAINER_PADDING * 2)) / subGridRows),
+      56
+    )
+  );
 
   useEffect(() => {
     const checkSavedSession = async () => {
@@ -1835,10 +1862,10 @@ export default function App() {
                               padding: 4,
                             }}
                           >
-                            <Text style={{ fontSize: 16, marginBottom: 2 }}>{rd.icon}</Text>
+                            <Text style={{ fontSize: Math.max(10, Math.min(18, dynamicCellSize * 0.7)) }}>{rd.icon}</Text>
                             <Text 
                               style={{ 
-                                fontSize: 13, 
+                                fontSize: Math.max(8, Math.min(13, dynamicCellSize * 0.5)), 
                                 fontWeight: '900', 
                                 color: rd.textColor || '#000', 
                                 textAlign: 'center',
@@ -2084,10 +2111,10 @@ export default function App() {
                             padding: 4,
                           }}
                         >
-                          <Text style={{ fontSize: 14, marginBottom: 2 }}>{fd.icon}</Text>
+                          <Text style={{ fontSize: Math.max(10, Math.min(16, dynamicSubCellSize * 0.6)) }}>{fd.icon}</Text>
                           <Text 
                             style={{ 
-                              fontSize: 12, 
+                              fontSize: Math.max(8, Math.min(12, dynamicSubCellSize * 0.45)), 
                               fontWeight: '900', 
                               color: fd.textColor || '#000', 
                               textAlign: 'center',
@@ -2791,8 +2818,8 @@ const styles = StyleSheet.create({
   urgentBannerSub: { fontSize: 11, color: '#856404', marginTop: 2 },
   urgentBannerAction: { fontSize: 12, fontWeight: '800', color: '#856404', marginLeft: 8 },
 
-  svgScrollContainer: { padding: 16, paddingBottom: 40 },
-  dimensionManagerCard: { borderRadius: 12, borderWidth: 1, padding: 10, marginBottom: 10 },
+  svgScrollContainer: { padding: 16, paddingBottom: 40, alignItems: 'center' },
+  dimensionManagerCard: { width: '100%', maxWidth: 1100, borderRadius: 12, borderWidth: 1, padding: 10, marginBottom: 10 },
   dimensionManagerTitle: { fontSize: 12, fontWeight: '700', marginBottom: 6 },
   dimensionControlsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6 },
   dimControlGroup: { flexDirection: 'row', alignItems: 'center', gap: 6 },
@@ -2803,14 +2830,14 @@ const styles = StyleSheet.create({
   clearGridBtn: { backgroundColor: '#ffe3e3', paddingHorizontal: 8, paddingVertical: 5, borderRadius: 6, borderWidth: 1, borderColor: '#ffa8a8' },
   clearGridBtnText: { fontSize: 11, color: '#e03131', fontWeight: '700' },
 
-  gridBoardWrapper: { alignItems: 'center', borderRadius: 16, padding: GRID_CONTAINER_PADDING, borderWidth: 2, elevation: 2 },
+  gridBoardWrapper: { alignSelf: 'center', alignItems: 'center', justifyContent: 'center', borderRadius: 16, padding: GRID_CONTAINER_PADDING, borderWidth: 2, elevation: 2 },
   gridBoard: { flexDirection: 'column' },
   gridRow: { flexDirection: 'row' },
   gridCell: { borderWidth: 0.5, alignItems: 'center', justifyContent: 'center' },
   gridCellSelected: { borderWidth: 2, borderColor: '#1877f2' },
   gridCellMatched: { borderWidth: 2, borderColor: '#155724' },
 
-  paintPaletteCard: { borderRadius: 14, borderWidth: 1, padding: 12, marginTop: 14 },
+  paintPaletteCard: { width: '100%', maxWidth: 1100, borderRadius: 14, borderWidth: 1, padding: 12, marginTop: 14 },
   paintPaletteTitle: { fontSize: 12, fontWeight: '700' },
   addRoomDefBtnText: { color: '#1877f2', fontWeight: '700', fontSize: 12 },
   paintToolsRow: { flexDirection: 'row', gap: 8, paddingVertical: 4 },
@@ -2826,7 +2853,7 @@ const styles = StyleSheet.create({
   iconChoice: { width: 44, height: 44, borderRadius: 8, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
   iconChoiceActive: { backgroundColor: '#e7f3ff', borderColor: '#1877f2', borderWidth: 2 },
 
-  furnitureManagerCard: { borderRadius: 14, borderWidth: 1, padding: 14, marginTop: 16, elevation: 2 },
+  furnitureManagerCard: { width: '100%', maxWidth: 1100, borderRadius: 14, borderWidth: 1, padding: 14, marginTop: 16, elevation: 2 },
   furnitureManagerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 10, borderBottomWidth: 1, marginBottom: 10 },
   furnitureManagerTitle: { fontSize: 16, fontWeight: '800' },
   furnitureManagerSub: { fontSize: 12, color: '#1877f2', fontWeight: '700', marginTop: 2 },
@@ -2930,7 +2957,7 @@ const styles = StyleSheet.create({
   counterBtn: { width: 34, height: 34, borderRadius: 17, justifyContent: 'center', alignItems: 'center' },
   counterBtnText: { fontSize: 18, fontWeight: '700' },
 
-  treeRoomCard: { borderRadius: 12, borderWidth: 1, marginBottom: 14, overflow: 'hidden' },
+  treeRoomCard: { width: '100%', maxWidth: 1100, borderRadius: 12, borderWidth: 1, marginBottom: 14, overflow: 'hidden' },
   treeRoomHeader: { flexDirection: 'row', alignItems: 'center', padding: 14, borderBottomWidth: 1 },
   treeRoomIcon: { fontSize: 18, marginRight: 8 },
   treeRoomTitle: { fontSize: 16, fontWeight: '800', flex: 1 },
