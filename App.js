@@ -415,35 +415,25 @@ export default function App() {
     headers: { Authorization: `Bearer ${authToken}` }
   });
 
-  const parseSafeJson = (data, fallback) => {
-    if (!data) return fallback;
-    if (typeof data === 'object') return data;
-    try {
-      return JSON.parse(data);
-    } catch (e) {
-      return fallback;
-    }
-  };
-
   const fetchMapConfig = async () => {
     try {
       const response = await axios.get(`${BACKEND_URL}/map-config`, getAuthHeaders());
-      if (response.data && !response.data.error) {
+      if (response.data && Object.keys(response.data).length > 0) {
         const d = response.data;
         if (d.gridRows) setGridRows(d.gridRows);
         if (d.gridCols) setGridCols(d.gridCols);
-        if (d.gridCells) setGridCells(parseSafeJson(d.gridCells, {}));
-        if (d.roomDefs) setRoomDefs(parseSafeJson(d.roomDefs, INITIAL_ROOM_DEFS));
-        if (d.subGridRowsMap) setSubGridRowsMap(parseSafeJson(d.subGridRowsMap, {}));
-        if (d.subGridColsMap) setSubGridColsMap(parseSafeJson(d.subGridColsMap, {}));
-        if (d.subGridDefs) setSubGridDefs(parseSafeJson(d.subGridDefs, {}));
-        if (d.subGridCells) setSubGridCells(parseSafeJson(d.subGridCells, {}));
-        if (d.spotsDefs) setSpotsDefs(parseSafeJson(d.spotsDefs, {}));
+        if (d.gridCells) setGridCells(typeof d.gridCells === 'string' ? JSON.parse(d.gridCells) : d.gridCells);
+        if (d.roomDefs) setRoomDefs(typeof d.roomDefs === 'string' ? JSON.parse(d.roomDefs) : d.roomDefs);
+        if (d.subGridRowsMap) setSubGridRowsMap(typeof d.subGridRowsMap === 'string' ? JSON.parse(d.subGridRowsMap) : d.subGridRowsMap);
+        if (d.subGridColsMap) setSubGridColsMap(typeof d.subGridColsMap === 'string' ? JSON.parse(d.subGridColsMap) : d.subGridColsMap);
+        if (d.subGridDefs) setSubGridDefs(typeof d.subGridDefs === 'string' ? JSON.parse(d.subGridDefs) : d.subGridDefs);
+        if (d.subGridCells) setSubGridCells(typeof d.subGridCells === 'string' ? JSON.parse(d.subGridCells) : d.subGridCells);
+        if (d.spotsDefs) setSpotsDefs(typeof d.spotsDefs === 'string' ? JSON.parse(d.spotsDefs) : d.spotsDefs);
         if (d.themeMode) setThemeMode(d.themeMode);
         if (d.inventoryViewMode) setInventoryViewMode(d.inventoryViewMode);
       }
     } catch (error) {
-      console.log('Brak zapisanego planu w bazie lub błąd:', error.message);
+      console.log('Błąd odczytu planu:', error.message);
     }
   };
 
@@ -460,13 +450,13 @@ export default function App() {
       await axios.post(`${BACKEND_URL}/map-config`, {
         gridRows,
         gridCols,
-        gridCells: JSON.stringify(customGridCells),
-        roomDefs: JSON.stringify(customRoomDefs),
-        subGridRowsMap: JSON.stringify(customSubRows),
-        subGridColsMap: JSON.stringify(customSubCols),
-        subGridDefs: JSON.stringify(customSubDefs),
-        subGridCells: JSON.stringify(customSubCells),
-        spotsDefs: JSON.stringify(customSpots),
+        gridCells: customGridCells,
+        roomDefs: customRoomDefs,
+        subGridRowsMap: customSubRows,
+        subGridColsMap: customSubCols,
+        subGridDefs: customSubDefs,
+        subGridCells: customSubCells,
+        spotsDefs: customSpots,
         themeMode,
         inventoryViewMode
       }, getAuthHeaders());
@@ -481,7 +471,6 @@ export default function App() {
     setSelectedSpotOnMap(null);
     setIsSubGridEditorMode(false);
     
-    // Ustawienie pierwszego dostępnego mebla jako pędzla
     const defs = subGridDefs[roomName] || [];
     if (defs.length > 0) {
       setActiveSubPaintTool(defs[0].id);
