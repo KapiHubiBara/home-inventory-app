@@ -111,12 +111,6 @@ const generateInitialGridCells = (rows, cols) => {
   return cells;
 };
 
-const PREDEFINED_COLORS = [
-  '#ff8787', '#ffc9c9', '#ff922b', '#ffd8a8', '#fcc419', '#ffe066', 
-  '#51cf66', '#c3fae8', '#339af0', '#a5d8ff', '#845ef7', '#d0bfff', 
-  '#f8f9fa', '#ced4da', '#495057'
-];
-
 export default function App() {
   const [authToken, setAuthToken] = useState(null);
   const [authChecking, setAuthChecking] = useState(true);
@@ -173,6 +167,9 @@ export default function App() {
   const [selectedSpotOnMap, setSelectedSpotOnMap] = useState(null);
   const [isAddSpotModalVisible, setIsAddSpotModalVisible] = useState(false);
   const [newSpotName, setNewSpotName] = useState('');
+
+  // Ostatnio używane kolory (max 5)
+  const [recentColors, setRecentColors] = useState(['#ff8787', '#ffa94d', '#51cf66', '#339af0', '#845ef7']);
 
   // Modale pokoju
   const [isAddRoomDefModalVisible, setIsAddRoomDefModalVisible] = useState(false);
@@ -447,6 +444,7 @@ export default function App() {
         if (d.subGridDefs) setSubGridDefs(typeof d.subGridDefs === 'string' ? JSON.parse(d.subGridDefs) : d.subGridDefs);
         if (d.subGridCells) setSubGridCells(typeof d.subGridCells === 'string' ? JSON.parse(d.subGridCells) : d.subGridCells);
         if (d.spotsDefs) setSpotsDefs(typeof d.spotsDefs === 'string' ? JSON.parse(d.spotsDefs) : d.spotsDefs);
+        if (d.recentColors) setRecentColors(typeof d.recentColors === 'string' ? JSON.parse(d.recentColors) : d.recentColors);
         if (d.themeMode) setThemeMode(d.themeMode);
         if (d.inventoryViewMode) setInventoryViewMode(d.inventoryViewMode);
       }
@@ -462,7 +460,8 @@ export default function App() {
     customGridCells = gridCells,
     customRoomDefs = roomDefs,
     customSubRows = subGridRowsMap,
-    customSubCols = subGridColsMap
+    customSubCols = subGridColsMap,
+    customRecentColors = recentColors
   ) => {
     try {
       await axios.post(`${BACKEND_URL}/map-config`, {
@@ -475,12 +474,23 @@ export default function App() {
         subGridDefs: customSubDefs,
         subGridCells: customSubCells,
         spotsDefs: customSpots,
+        recentColors: customRecentColors,
         themeMode,
         inventoryViewMode
       }, getAuthHeaders());
     } catch (error) {
       console.log('Błąd zapisu konfiguracji:', error.message);
     }
+  };
+
+  const addRecentColor = (color) => {
+    if (!color) return;
+    setRecentColors(prev => {
+      const filtered = prev.filter(c => c.toLowerCase() !== color.toLowerCase());
+      const updated = [color, ...filtered].slice(0, 5);
+      saveMapConfig(subGridCells, subGridDefs, spotsDefs, gridCells, roomDefs, subGridRowsMap, subGridColsMap, updated);
+      return updated;
+    });
   };
 
   const handleEnterRoom = (roomName) => {
@@ -795,6 +805,8 @@ export default function App() {
     const oldName = roomToEdit.name;
     const newName = editRoomName.trim();
 
+    addRecentColor(editRoomColor);
+
     const updatedDefs = roomDefs.map(rd => rd.id === roomToEdit.id ? { 
       ...rd, 
       name: newName, 
@@ -854,6 +866,8 @@ export default function App() {
     if (!editFurnName.trim() || !furnToEdit || !insideRoom) return;
     const oldName = furnToEdit.name;
     const newName = editFurnName.trim();
+
+    addRecentColor(editFurnColor);
 
     const currentList = subGridDefs[insideRoom] || [];
     const updatedDefs = {
@@ -2915,23 +2929,47 @@ export default function App() {
                 ))}
               </View>
 
-              <Text style={[styles.inputLabel, { color: t.textSub }]}>Wybierz kolor z palety:</Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginVertical: 10 }}>
-                {PREDEFINED_COLORS.map(color => (
-                  <TouchableOpacity
-                    key={color}
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 18,
-                      backgroundColor: color,
-                      borderWidth: editRoomColor === color ? 3 : 1,
-                      borderColor: editRoomColor === color ? '#1877f2' : '#ced4da'
-                    }}
-                    onPress={() => setEditRoomColor(color)}
+              <Text style={[styles.inputLabel, { color: t.textSub }]}>Kolor pokoju (wybierz z palety lub wpisz HEX):</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 8 }}>
+                {Platform.OS === 'web' ? (
+                  <input 
+                    type="color" 
+                    value={editRoomColor} 
+                    onChange={(e) => setEditRoomColor(e.target.value)} 
+                    style={{ width: 54, height: 44, border: 'none', borderRadius: 8, cursor: 'pointer', background: 'transparent' }} 
                   />
-                ))}
+                ) : null}
+                <TextInput 
+                  style={[styles.modalInput, { backgroundColor: t.bgInput, color: t.textMain, flex: 1, marginTop: 0 }]} 
+                  value={editRoomColor} 
+                  onChangeText={setEditRoomColor} 
+                  placeholder="#ced4da"
+                  placeholderTextColor={t.emptyText}
+                />
               </View>
+
+              {recentColors.length > 0 && (
+                <View style={{ marginTop: 4, marginBottom: 6 }}>
+                  <Text style={[styles.inputLabelSmall, { color: t.textSub }]}>Ostatnio używane kolory:</Text>
+                  <View style={{ flexDirection: 'row', gap: 8, marginVertical: 4 }}>
+                    {recentColors.map(color => (
+                      <TouchableOpacity
+                        key={color}
+                        style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: 16,
+                          backgroundColor: color,
+                          borderWidth: editRoomColor === color ? 3 : 1,
+                          borderColor: editRoomColor === color ? '#1877f2' : '#ced4da'
+                        }}
+                        onPress={() => setEditRoomColor(color)}
+                      />
+                    ))}
+                  </View>
+                </View>
+              )}
+
               <View style={[styles.modalActions, { borderTopColor: t.border }]}>
                 <TouchableOpacity style={styles.cancelBtn} onPress={() => setIsEditRoomModalVisible(false)}>
                   <Text style={[styles.cancelBtnText, { color: t.textSub }]}>Anuluj</Text>
@@ -3006,23 +3044,47 @@ export default function App() {
                 ))}
               </View>
 
-              <Text style={[styles.inputLabel, { color: t.textSub }]}>Wybierz kolor mebla z palety:</Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginVertical: 10 }}>
-                {PREDEFINED_COLORS.map(color => (
-                  <TouchableOpacity
-                    key={color}
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 18,
-                      backgroundColor: color,
-                      borderWidth: editFurnColor === color ? 3 : 1,
-                      borderColor: editFurnColor === color ? '#1877f2' : '#ced4da'
-                    }}
-                    onPress={() => setEditFurnColor(color)}
+              <Text style={[styles.inputLabel, { color: t.textSub }]}>Kolor mebla (wybierz z palety lub wpisz HEX):</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 8 }}>
+                {Platform.OS === 'web' ? (
+                  <input 
+                    type="color" 
+                    value={editFurnColor} 
+                    onChange={(e) => setEditFurnColor(e.target.value)} 
+                    style={{ width: 54, height: 44, border: 'none', borderRadius: 8, cursor: 'pointer', background: 'transparent' }} 
                   />
-                ))}
+                ) : null}
+                <TextInput 
+                  style={[styles.modalInput, { backgroundColor: t.bgInput, color: t.textMain, flex: 1, marginTop: 0 }]} 
+                  value={editFurnColor} 
+                  onChangeText={setEditFurnColor} 
+                  placeholder="#a5d8ff"
+                  placeholderTextColor={t.emptyText}
+                />
               </View>
+
+              {recentColors.length > 0 && (
+                <View style={{ marginTop: 4, marginBottom: 6 }}>
+                  <Text style={[styles.inputLabelSmall, { color: t.textSub }]}>Ostatnio używane kolory:</Text>
+                  <View style={{ flexDirection: 'row', gap: 8, marginVertical: 4 }}>
+                    {recentColors.map(color => (
+                      <TouchableOpacity
+                        key={color}
+                        style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: 16,
+                          backgroundColor: color,
+                          borderWidth: editFurnColor === color ? 3 : 1,
+                          borderColor: editFurnColor === color ? '#1877f2' : '#ced4da'
+                        }}
+                        onPress={() => setEditFurnColor(color)}
+                      />
+                    ))}
+                  </View>
+                </View>
+              )}
+
               <View style={[styles.modalActions, { borderTopColor: t.border }]}>
                 <TouchableOpacity style={styles.cancelBtn} onPress={() => setIsEditFurnModalVisible(false)}>
                   <Text style={[styles.cancelBtnText, { color: t.textSub }]}>Anuluj</Text>
