@@ -793,7 +793,6 @@ export default function App() {
       textColor: editRoomColor === '#495057' ? '#ffffff' : '#000000'
     } : rd);
 
-    // Aktualizacja kluczy podsiatek jeśli zmieniono nazwę
     let updatedSubGridDefs = { ...subGridDefs };
     let updatedSubGridCells = { ...subGridCells };
     let updatedSubRows = { ...subGridRowsMap };
@@ -858,7 +857,6 @@ export default function App() {
       } : fd)
     };
 
-    // Aktualizacja powiązanych pudełek
     let updatedSpots = { ...spotsDefs };
     if (oldName !== newName) {
       const oldKey = `${insideRoom}>${oldName}`;
@@ -2360,16 +2358,29 @@ export default function App() {
                           </Text>
                         </View>
                          
-                        <TouchableOpacity 
-                          style={styles.addSpotBtn} 
-                          onPress={() => handleOpenAddModal({ 
-                            room: insideRoom, 
-                            furniture: selectedFurnitureOnMap,
-                            spot: selectedSpotOnMap
-                          })}
-                        >
-                          <Text style={styles.addSpotBtnText}>+ Włóż produkt</Text>
-                        </TouchableOpacity>
+                        <View style={{ flexDirection: 'row', gap: 6 }}>
+                          <TouchableOpacity 
+                            style={[styles.editBadgeIconBtn, { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, flexDirection: 'row', alignItems: 'center', gap: 4 }]} 
+                            onPress={() => {
+                              const found = currentRoomFurnDefs.find(fd => fd.name === selectedFurnitureOnMap);
+                              if (found) openEditFurnModal(found);
+                            }}
+                          >
+                            <Text style={{ fontSize: 12 }}>✏️</Text>
+                            <Text style={{ color: '#1877f2', fontWeight: '700', fontSize: 12 }}>Edytuj mebel</Text>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity 
+                            style={styles.addSpotBtn} 
+                            onPress={() => handleOpenAddModal({ 
+                              room: insideRoom, 
+                              furniture: selectedFurnitureOnMap,
+                              spot: selectedSpotOnMap
+                            })}
+                          >
+                            <Text style={styles.addSpotBtnText}>+ Włóż produkt</Text>
+                          </TouchableOpacity>
+                        </View>
                       </View>
 
                       <View style={{ marginBottom: 12 }}>
