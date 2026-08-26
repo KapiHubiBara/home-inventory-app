@@ -168,6 +168,10 @@ export default function App() {
   const [isAddSpotModalVisible, setIsAddSpotModalVisible] = useState(false);
   const [newSpotName, setNewSpotName] = useState('');
 
+  // Stan dla masowego przenoszenia lokalizacji
+  const [moveOldPrefix, setMoveOldPrefix] = useState('');
+  const [moveNewPrefix, setMoveNewPrefix] = useState('');
+
   // Ostatnio używane kolory (max 5)
   const [recentColors, setRecentColors] = useState(['#ff8787', '#ffa94d', '#51cf66', '#339af0', '#845ef7']);
 
@@ -491,6 +495,40 @@ export default function App() {
       saveMapConfig(subGridCells, subGridDefs, spotsDefs, gridCells, roomDefs, subGridRowsMap, subGridColsMap, updated);
       return updated;
     });
+  };
+
+  const handleExportJson = () => {
+    try {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(items, null, 2));
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", `stashbrain_backup_${new Date().toISOString().split('T')[0]}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+      showAlert("Sukces", "Pobrano kopię zapasową listy przedmiotów w formacie JSON!");
+    } catch (e) {
+      showAlert("Błąd", "Nie udało się wyeksportować danych.");
+    }
+  };
+
+  const handleBulkMoveLocation = async () => {
+    if (!moveOldPrefix.trim() || !moveNewPrefix.trim()) {
+      showAlert("Błąd", "Wprowadź stary oraz nowy prefiks lokalizacji.");
+      return;
+    }
+    try {
+      const response = await axios.post(`${BACKEND_URL}/items/move-location`, {
+        old_prefix: moveOldPrefix.trim(),
+        new_prefix: moveNewPrefix.trim()
+      }, getAuthHeaders());
+      showAlert("Sukces", response.data.message || "Przeniesiono pomyślnie!");
+      setMoveOldPrefix('');
+      setMoveNewPrefix('');
+      fetchItems();
+    } catch (error) {
+      showAlert("Błąd", error.response?.data?.detail || "Nie udało się przenieść lokalizacji.");
+    }
   };
 
   const handleEnterRoom = (roomName) => {
@@ -2741,6 +2779,53 @@ export default function App() {
             </View>
 
             <ScrollView contentContainerStyle={styles.listContainer}>
+              {/* Narzędzie masowego przenoszenia lokalizacji */}
+              <View style={[styles.settingsCard, { backgroundColor: t.bgCard, borderColor: t.border }]}>
+                <Text style={[styles.settingsCardTitle, { color: t.textMain }]}>📦 Masowe przenoszenie pudełek / mebli</Text>
+                <Text style={[styles.settingsCardSub, { color: t.textSub, marginBottom: 10 }]}>
+                  Przenosisz całe pudełko lub mebel w nowe miejsce? Zmień ścieżkę dla wszystkich przedmiotów naraz.
+                </Text>
+
+                <Text style={[styles.inputLabel, { color: t.textSub }]}>Stara ścieżka (lub jej początek):</Text>
+                <TextInput 
+                  style={[styles.modalInput, { backgroundColor: t.bgInput, color: t.textMain, marginTop: 4, marginBottom: 8 }]} 
+                  placeholder="np. Kuchnia > Szafa > Pudełko 1" 
+                  placeholderTextColor={t.emptyText}
+                  value={moveOldPrefix}
+                  onChangeText={setMoveOldPrefix}
+                />
+
+                <Text style={[styles.inputLabel, { color: t.textSub }]}>Nowa ścieżka docelowa:</Text>
+                <TextInput 
+                  style={[styles.modalInput, { backgroundColor: t.bgInput, color: t.textMain, marginTop: 4, marginBottom: 12 }]} 
+                  placeholder="np. Salon > Komoda > Pudełko 1" 
+                  placeholderTextColor={t.emptyText}
+                  value={moveNewPrefix}
+                  onChangeText={setMoveNewPrefix}
+                />
+
+                <TouchableOpacity 
+                  style={{ backgroundColor: '#2563eb', padding: 12, borderRadius: 8, alignItems: 'center' }}
+                  onPress={handleBulkMoveLocation}
+                >
+                  <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 14 }}>Przenieś masowo lokalizację ➔</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Kopia zapasowa / Eksport */}
+              <View style={[styles.settingsCard, { backgroundColor: t.bgCard, borderColor: t.border }]}>
+                <Text style={[styles.settingsCardTitle, { color: t.textMain }]}>💾 Kopia zapasowa (Eksport JSON)</Text>
+                <Text style={[styles.settingsCardSub, { color: t.textSub, marginBottom: 10 }]}>
+                  Pobierz plik ze wszystkimi swoimi przedmiotami na wypadek awarii lub zmiany urządzenia.
+                </Text>
+                <TouchableOpacity 
+                  style={{ backgroundColor: '#059669', padding: 12, borderRadius: 8, alignItems: 'center' }}
+                  onPress={handleExportJson}
+                >
+                  <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 14 }}>Pobierz kopię JSON 📥</Text>
+                </TouchableOpacity>
+              </View>
+
               <View style={[styles.settingsCard, { backgroundColor: t.bgCard, borderColor: t.border }]}>
                 <Text style={[styles.settingsCardTitle, { color: t.textMain }]}>🎨 Motyw aplikacji</Text>
                 <Text style={[styles.settingsCardSub, { color: t.textSub }]}>Wybierz styl wyglądu (zapisuje się w bazie)</Text>
