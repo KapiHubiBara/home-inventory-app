@@ -111,14 +111,6 @@ const generateInitialGridCells = (rows, cols) => {
   return cells;
 };
 
-const INITIAL_ROOM_FURNITURE_DEFS = {
-  'Kuchnia': [
-    { id: 'furn-zlew', name: 'Zlew', icon: '🚰', color: '#a5d8ff', border: '#339af0', textColor: '#1864ab' },
-    { id: 'furn-szafka1', name: 'Szafka dolna', icon: '🗄️', color: '#ffec99', border: '#fcc419', textColor: '#f59f00' },
-    { id: 'furn-lodowka', name: 'Lodówka', icon: '🧊', color: '#b2f2bb', border: '#51cf66', textColor: '#2b8a3e' }
-  ]
-};
-
 const PREDEFINED_COLORS = [
   '#ff8787', '#ffc9c9', '#ff922b', '#ffd8a8', '#fcc419', '#ffe066', 
   '#51cf66', '#c3fae8', '#339af0', '#a5d8ff', '#845ef7', '#d0bfff', 
@@ -170,10 +162,10 @@ export default function App() {
   const [insideRoom, setInsideRoom] = useState(null);
   const [subGridRowsMap, setSubGridRowsMap] = useState({});
   const [subGridColsMap, setSubGridColsMap] = useState({});
-  const [subGridDefs, setSubGridDefs] = useState(INITIAL_ROOM_FURNITURE_DEFS);
+  const [subGridDefs, setSubGridDefs] = useState({});
   const [subGridCells, setSubGridCells] = useState({});
   const [isSubGridEditorMode, setIsSubGridEditorMode] = useState(false);
-  const [activeSubPaintTool, setActiveSubPaintTool] = useState('furn-zlew');
+  const [activeSubPaintTool, setActiveSubPaintTool] = useState(null);
   const [selectedFurnitureOnMap, setSelectedFurnitureOnMap] = useState(null);
 
   const [spotsDefs, setSpotsDefs] = useState({});
@@ -242,6 +234,7 @@ export default function App() {
   const currentSubRows = (insideRoom && subGridRowsMap[insideRoom]) || 6;
   const currentSubCols = (insideRoom && subGridColsMap[insideRoom]) || 8;
   const currentRoomCells = (insideRoom && subGridCells[insideRoom]) || {};
+  const currentRoomFurnDefs = (insideRoom && subGridDefs[insideRoom]) || [];
 
   const availableWidth = Math.min(windowDimensions.width - 48, 1100);
   const availableHeight = windowDimensions.height - (isGridEditorMode || isSubGridEditorMode ? 340 : 270);
@@ -443,7 +436,7 @@ export default function App() {
         if (d.roomDefs) setRoomDefs(parseSafeJson(d.roomDefs, INITIAL_ROOM_DEFS));
         if (d.subGridRowsMap) setSubGridRowsMap(parseSafeJson(d.subGridRowsMap, {}));
         if (d.subGridColsMap) setSubGridColsMap(parseSafeJson(d.subGridColsMap, {}));
-        if (d.subGridDefs) setSubGridDefs(parseSafeJson(d.subGridDefs, INITIAL_ROOM_FURNITURE_DEFS));
+        if (d.subGridDefs) setSubGridDefs(parseSafeJson(d.subGridDefs, {}));
         if (d.subGridCells) setSubGridCells(parseSafeJson(d.subGridCells, {}));
         if (d.spotsDefs) setSpotsDefs(parseSafeJson(d.spotsDefs, {}));
         if (d.themeMode) setThemeMode(d.themeMode);
@@ -482,6 +475,21 @@ export default function App() {
     }
   };
 
+  const handleEnterRoom = (roomName) => {
+    setInsideRoom(roomName);
+    setSelectedFurnitureOnMap(null);
+    setSelectedSpotOnMap(null);
+    setIsSubGridEditorMode(false);
+    
+    // Ustawienie pierwszego dostępnego mebla jako pędzla
+    const defs = subGridDefs[roomName] || [];
+    if (defs.length > 0) {
+      setActiveSubPaintTool(defs[0].id);
+    } else {
+      setActiveSubPaintTool('eraser');
+    }
+  };
+
   const gridPanResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => isGridEditorMode,
@@ -506,7 +514,7 @@ export default function App() {
     PanResponder.create({
       onStartShouldSetPanResponder: () => isSubGridEditorMode,
       onPanResponderMove: (evt) => {
-        if (!insideRoom) return;
+        if (!insideRoom || !activeSubPaintTool) return;
         const { locationX, locationY } = evt.nativeEvent;
         const c = Math.floor(locationX / dynamicSubCellSize);
         const r = Math.floor(locationY / dynamicSubCellSize);
@@ -610,6 +618,7 @@ export default function App() {
     setInsideRoom(null);
     setSelectedFurnitureOnMap(null);
     setSelectedSpotOnMap(null);
+    setIsSubGridEditorMode(false);
   };
 
   const handleAddNewSpot = async () => {
@@ -734,7 +743,6 @@ export default function App() {
   const handleSubCellClick = async (r, c) => {
     if (!insideRoom) return;
     const key = `${r}-${c}`;
-    const currentFurnDefs = subGridDefs[insideRoom] || [];
     const roomCells = subGridCells[insideRoom] || {};
 
     if (isSubGridEditorMode) {
@@ -754,7 +762,7 @@ export default function App() {
     } else {
       const assignedFurnId = roomCells[key];
       if (assignedFurnId) {
-        const foundFurn = currentFurnDefs.find(fd => fd.id === assignedFurnId);
+        const foundFurn = currentRoomFurnDefs.find(fd => fd.id === assignedFurnId);
         if (foundFurn) {
           setSelectedFurnitureOnMap(foundFurn.name);
           setSelectedSpotOnMap(null);
@@ -926,8 +934,9 @@ export default function App() {
 
   const handleAddNewFurnDef = () => {
     if (!newFurnDefName.trim() || !insideRoom) return;
+    const newDefId = `furn-custom-${Date.now()}`;
     const newDef = {
-      id: `furn-custom-${Date.now()}`,
+      id: newDefId,
       name: newFurnDefName.trim(),
       icon: newFurnDefIcon,
       color: '#e7f5ff',
@@ -939,7 +948,7 @@ export default function App() {
       [insideRoom]: [...(subGridDefs[insideRoom] || []), newDef]
     };
     setSubGridDefs(updatedDefs);
-    setActiveSubPaintTool(newDef.id);
+    setActiveSubPaintTool(newDefId);
     setIsAddFurnDefModalVisible(false);
     setNewFurnDefName('');
     saveMapConfig(subGridCells, updatedDefs, spotsDefs, gridCells, roomDefs, subGridRowsMap, subGridColsMap);
@@ -1768,14 +1777,16 @@ export default function App() {
                 </Text>
               </View>
 
-              <TouchableOpacity 
-                style={[styles.editPlanBtn, isGridEditorMode && styles.editPlanBtnActive]} 
-                onPress={handleToggleEditorMode}
-              >
-                <Text style={[styles.editPlanBtnText, isGridEditorMode && styles.editPlanBtnTextActive]}>
-                  {isGridEditorMode ? 'Zakończ ✓' : '🛠️ Edytuj plan'}
-                </Text>
-              </TouchableOpacity>
+              {!insideRoom && (
+                <TouchableOpacity 
+                  style={[styles.editPlanBtn, isGridEditorMode && styles.editPlanBtnActive]} 
+                  onPress={handleToggleEditorMode}
+                >
+                  <Text style={[styles.editPlanBtnText, isGridEditorMode && styles.editPlanBtnTextActive]}>
+                    {isGridEditorMode ? 'Zakończ ✓' : '🛠️ Edytuj plan'}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             {!insideRoom && (
@@ -1998,7 +2009,7 @@ export default function App() {
                           <View style={{ flexDirection: 'row', gap: 6 }}>
                             <TouchableOpacity 
                               style={{ backgroundColor: '#059669', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, justifyContent: 'center' }}
-                              onPress={() => setInsideRoom(selectedRoomOnMap)}
+                              onPress={() => handleEnterRoom(selectedRoomOnMap)}
                             >
                               <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 12 }}>Wejdź do środka 🚪</Text>
                             </TouchableOpacity>
@@ -2095,8 +2106,7 @@ export default function App() {
                         {Array.from({ length: currentSubCols }).map((_, c) => {
                           const cellKey = `${r}-${c}`;
                           const furnId = currentRoomCells[cellKey];
-                          const currentFurnDefs = subGridDefs[insideRoom] || [];
-                          const furnDef = currentFurnDefs.find(fd => fd.id === furnId);
+                          const furnDef = currentRoomFurnDefs.find(fd => fd.id === furnId);
 
                           const isSelected = selectedFurnitureOnMap === furnDef?.name && !isSubGridEditorMode;
                            
@@ -2140,7 +2150,7 @@ export default function App() {
                       </View>
                     ))}
 
-                    {!isSubGridEditorMode && (subGridDefs[insideRoom] || []).map(fd => {
+                    {!isSubGridEditorMode && currentRoomFurnDefs.map(fd => {
                       const bbox = getFurnBoundingBox(fd.id);
                       if (!bbox) return null;
                       return (
@@ -2190,7 +2200,7 @@ export default function App() {
                     </View>
 
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.paintToolsRow}>
-                      {(subGridDefs[insideRoom] || []).map(fd => {
+                      {currentRoomFurnDefs.map(fd => {
                         const isActive = activeSubPaintTool === fd.id;
                         return (
                           <View 
