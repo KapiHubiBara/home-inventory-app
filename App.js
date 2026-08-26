@@ -142,7 +142,7 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState('inventory');
   const [inventoryViewMode, setInventoryViewMode] = useState('list');
-  const [inventorySortMode, setInventorySortMode] = useState('expiry'); // 'expiry', 'name', 'newest'
+  const [inventorySortMode, setInventorySortMode] = useState('expiry');
   const [expandedNodes, setExpandedNodes] = useState({});
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -195,6 +195,11 @@ export default function App() {
   const [editFurnName, setEditFurnName] = useState('');
   const [editFurnIcon, setEditFurnIcon] = useState('');
   const [editFurnColor, setEditFurnColor] = useState('');
+
+  // Modal importu JSON
+  const [isJsonImportModalVisible, setIsJsonImportModalVisible] = useState(false);
+  const [jsonInputText, setJsonInputText] = useState('');
+  const [jsonImportLoading, setJsonImportLoading] = useState(false);
 
   const [newlyAddedItemIds, setNewlyAddedItemIds] = useState([]);
   const [customShoppingItems, setCustomShoppingItems] = useState([]);
@@ -1213,7 +1218,6 @@ export default function App() {
       if (newId) setNewlyAddedItemIds(prev => [...new Set([...prev, newId])]);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       
-      // Reset podstawowych pól zachowując lokalizację i kategorię
       setFormName('');
       setFormBrand('');
       setFormBarcode('');
@@ -1224,6 +1228,32 @@ export default function App() {
       showAlert("Zapisano!", `Dodano "${payload.name}" do magazynu. Możesz dodać kolejny produkt.`);
     } catch (error) {
       showAlert('Błąd zapisu', JSON.stringify(error.response?.data?.detail) || error.message);
+    }
+  };
+
+  const handleJsonImport = async () => {
+    if (!jsonInputText.trim()) {
+      showAlert('Błąd', 'Wklej dane JSON.');
+      return;
+    }
+    try {
+      setJsonImportLoading(true);
+      const parsed = JSON.parse(jsonInputText);
+      if (!Array.isArray(parsed)) {
+        showAlert('Błąd', 'Wklejony JSON musi być tablicą obiektów [...]');
+        setJsonImportLoading(false);
+        return;
+      }
+      await axios.post(`${BACKEND_URL}/items/batch`, { items: parsed }, getAuthHeaders());
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showAlert('Sukces', `Pomyślnie zaimportowano ${parsed.length} przedmiotów!`);
+      setIsJsonImportModalVisible(false);
+      setJsonInputText('');
+      fetchItems();
+    } catch (error) {
+      showAlert('Błąd JSON', 'Nieprawidłowy format JSON: ' + (error.response?.data?.detail || error.message));
+    } finally {
+      setJsonImportLoading(false);
     }
   };
 
@@ -1448,7 +1478,6 @@ export default function App() {
       if (inventorySortMode === 'newest') {
         return new Date(b.created_at || 0) - new Date(a.created_at || 0);
       }
-      // Domyślnie 'expiry'
       const statusA = getExpiryStatus(a.expiry_date);
       const statusB = getExpiryStatus(b.expiry_date);
       return (statusA ? statusA.diffDays : Infinity) - (statusB ? statusB.diffDays : Infinity);
@@ -1795,6 +1824,9 @@ export default function App() {
               </View>
 
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <TouchableOpacity style={{ backgroundColor: '#059669', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 }} onPress={() => setIsJsonImportModalVisible(true)}>
+                  <Text style={{ color: '#ffffff', fontWeight: '700', fontSize: 13 }}>📥 Import JSON</Text>
+                </TouchableOpacity>
                 <TouchableOpacity style={styles.addButton} onPress={() => handleOpenAddModal()}>
                   <Text style={styles.addButtonText}>+ Dodaj</Text>
                 </TouchableOpacity>
@@ -2786,6 +2818,40 @@ export default function App() {
             )}
           </View>
         )}
+
+        {/* ==================== MODAL IMPORTU JSON ==================== */}
+        <Modal visible={isJsonImportModalVisible} animationType="slide" transparent={true}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalBackdrop}>
+            <View style={[styles.modalContent, { backgroundColor: t.bgCard }]}>
+              <Text style={[styles.modalTitle, { color: t.textMain }]}>📥 Importuj listę z JSON</Text>
+              <Text style={[styles.inputLabel, { color: t.textSub, marginBottom: 6 }]}>
+                Wklej tablicę obiektów JSON (np. skopiowaną z pliku):
+              </Text>
+
+              <TextInput
+                style={[styles.modalInput, { backgroundColor: t.bgInput, color: t.textMain, height: 180, textAlignVertical: 'top', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' }]}
+                multiline
+                placeholder={`[\n  {\n    "name": "Mleko",\n    "quantity": 2,\n    "unit": "szt",\n    "location": "Kuchnia > Lodówka",\n    "category": "żywność"\n  }\n]`}
+                placeholderTextColor={t.emptyText}
+                value={jsonInputText}
+                onChangeText={setJsonInputText}
+              />
+
+              <View style={[styles.modalActions, { borderTopColor: t.border }]}>
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => setIsJsonImportModalVisible(false)}>
+                  <Text style={[styles.cancelBtnText, { color: t.textSub }]}>Anuluj</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.saveBtn, { backgroundColor: '#059669' }]} 
+                  onPress={handleJsonImport}
+                  disabled={jsonImportLoading}
+                >
+                  {jsonImportLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>Importuj dane</Text>}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
 
         {/* ==================== MODAL DODAWANIA POKOJU ==================== */}
         <Modal visible={isAddRoomDefModalVisible} animationType="slide" transparent={true}>
